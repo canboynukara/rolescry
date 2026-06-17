@@ -22,7 +22,7 @@ Given a raw table read with \emph{no} header (every cell character), scores
 each of the first rows with a 7-signal weighted heuristic (alphabetic ratio,
 non-numeric ratio, uniqueness, normalized Shannon entropy, median string
 length, alpha-vs-next-row transition, fill completeness) and returns the
-most header-like row plus repaired, de-duplicated column names. Empty cells
+most header-like row plus repaired, unique column names. Empty cells
 are upward-filled (merged-cell repair) and any still-empty name becomes
 \code{col_<j>}. Base + stats only; no file-format dependencies.
 }

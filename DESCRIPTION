@@ -2,7 +2,7 @@ Package: rolescry
 Title: Name-Blind Variable-Role Detection by Data Signature
 Version: 0.1.0
 Authors@R: c(
-    person("Can", "Boynukara", role = c("aut", "cre"),
+    person("Can", "Boynukara", role = c("aut", "cre", "cph"),
            email = "canboynukara1@gmail.com",
            comment = c(ORCID = "0000-0002-6075-3923")),
     person(c("M.", "Yasir"), "Ceyhan", role = "ctb",
@@ -36,8 +36,10 @@ Suggests:
     haven,
     testthat (>= 3.0.0),
     knitr,
-    rmarkdown
+    rmarkdown,
+    spelling
 Config/testthat/edition: 3
 VignetteBuilder: knitr
 URL: https://github.com/canboynukara/rolescry
 BugReports: https://github.com/canboynukara/rolescry/issues
+Language: en-US

@@ -19,7 +19,7 @@ detect_roles(data, name_bonus = NULL, verbose = FALSE)
 \item{name_bonus}{Optional named list mapping role keys to character vectors
 of case-insensitive keyword regex fragments, e.g.
 \code{list(group_var = c("treat", "arm"), outcome_binary = c("death"))}.
-Recognised keys: \code{group_var}, \code{outcome_continuous},
+Recognized keys: \code{group_var}, \code{outcome_continuous},
 \code{outcome_binary}, \code{subject_id}, \code{time_variable},
 \code{event_variable}. \code{NULL} (default) = pure signature detection.}
 
@@ -49,7 +49,7 @@ paired and agreement scores.}
 Inspects an already-loaded data frame and assigns each column (or group of
 columns) to statistical roles -- group variable, continuous/binary outcome,
 survival time and event, paired and agreement measurement pairs, repeated
-measures, scale items, subject id, and covariates -- using only the data's
+measures, scale items, subject id, and covariates -- using only the data
 information-theoretic signature (Shannon entropy, distributional shape,
 inter-column structure) and never the column names. Renaming columns to
 \code{col_1, col_2, ...} does not change the result (the name-blindness, or
