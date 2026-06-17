@@ -1,5 +1,7 @@
 ^CITATION\.cff$
 ^BUILD_STATUS\.md$
+^cran-comments\.md$
+^\.github$
 ^README\.Rmd$
 ^doc$
 ^Meta$
