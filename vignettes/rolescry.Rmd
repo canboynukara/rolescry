@@ -1,0 +1,125 @@
+---
+title: "Name-blind variable-role detection with rolescry"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Name-blind variable-role detection with rolescry}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+library(rolescry)
+set.seed(1)
+```
+
+## The problem: names lie, data does not
+
+Real datasets arrive with column names that are missing, misleading, in the
+wrong language, or simply wrong: a column called `category_code` holding
+continuous lab values, a `gender` column that is actually a free numeric
+measurement, an outcome buried under an opaque `v7`. Any tool that decides a
+column's statistical *role* from its **name** inherits every one of those lies.
+
+`rolescry` decides roles from the **data signature** instead -- the guiding
+principle is *Data inspice, non nomen* ("inspect the data, not the name").
+Renaming every column to `col_1, col_2, ...` does not change a single role
+assignment. This is the **turnusol** (litmus) invariant, and it is the
+package's keystone test.
+
+## A worked example
+
+```{r example}
+d <- data.frame(
+  arm  = rep(c(0, 1), each = 50),  # a balanced 2-level grouping
+  pre  = rnorm(100, 10, 2),        # measured before ...
+  post = rnorm(100, 11, 2),        # ... and after (paired)
+  resp = rbinom(100, 1, 0.4)       # a binary response
+)
+
+res <- detect_roles(d)
+res
+summary(res)
+```
+
+The same call on the name-stripped twin yields the same roles by position:
+
+```{r blind}
+d_blind <- setNames(d, paste0("col_", seq_along(d)))
+pos <- function(r, dat) match(r$roles$paired_pairs$columns, names(dat))
+identical(pos(detect_roles(d), d), pos(detect_roles(d_blind), d_blind))
+```
+
+## How a role is scored
+
+Each column is first **typed by value** (`continuous`, `binary`, `categorical`,
+`ID`), never by name. Candidate roles are then scored by signatures that capture
+the statistical shape a role implies -- correlation and distributional overlap
+for paired measurements, Bland-Altman bias and intraclass correlation for
+agreement, event-rate and right-skew for survival, inter-item correlation and a
+Cronbach-alpha proxy for scale items, and so on. Every score is a transparent
+sum of named components you can inspect:
+
+```{r breakdown}
+res$roles$paired_pairs$components[[1]]
+```
+
+### Shannon entropy
+
+For a categorical column with level proportions \(p_1, \dots, p_k\), the
+normalized Shannon entropy
+
+\[ H_{\text{norm}} = \frac{-\sum_i p_i \log_2 p_i}{\log_2 k} \in [0, 1] \]
+
+measures how balanced the levels are. A grouping variable (treatment vs control)
+has high entropy (near-balanced); a near-constant flag has entropy near zero.
+Entropy drives both the value classifier and the group-balance signal.
+
+### Normalized mutual information
+
+To ask -- name-blind -- whether a candidate grouping actually *carries
+information about* an outcome, `rolescry` uses normalized mutual information:
+
+\[ \text{NMI}(X, Y) = \frac{I(X; Y)}{\min\{H(X),\, H(Y)\}} \in [0, 1], \]
+
+which is 0 for independent variables and 1 for a deterministic association, and
+is comparable across variables with different numbers of levels. It is exposed
+directly:
+
+```{r nmi}
+g <- sample(c("A", "B", "C"), 300, replace = TRUE)
+y <- ifelse(g == "A", "event", sample(c("event", "none"), 300, replace = TRUE))
+compute_nmi(g, y)          # > 0: g informs y
+compute_nmi(g, sample(g))  # ~ 0: shuffled -> independent
+```
+
+## The optional, capped name bonus
+
+Names are not *useless* -- they are just untrustworthy. When you do trust them,
+pass a keyword dictionary via `name_bonus`. Names then act only as a small,
+**capped** tie-breaker (at most a +10 point nudge, i.e. <= 10% of the selection
+score); the mathematical signature still dominates (>= 90%), the relationship
+enforced by `score_gap_ok()`.
+
+```{r namebonus}
+clin <- data.frame(
+  male  = rbinom(120, 1, 0.5),      # a demographic binary (first)
+  death = rbinom(120, 1, 0.3)       # the intended outcome
+)
+detect_roles(clin)$roles$outcome_binary$columns                                  # positional default
+detect_roles(clin, name_bonus = rolescry_default_name_bonus())$roles$outcome_binary$columns  # "death"
+```
+
+## Header-aware loading
+
+`read_data()` reads a file with the header row found by the same
+information-theoretic scorer (`detect_header()`), so messy exports with title
+rows or merged cells still load with sensible column names. Delimited text works
+with base R; spreadsheet and statistical formats use optional packages and
+degrade gracefully if they are not installed.
+
+## Attribution
+
+`rolescry` is derived from Boynukara, C. (2026). *MDStatR* (v2.1.0 Veritas).
+Zenodo. <https://doi.org/10.5281/zenodo.20707791>. Run `citation("rolescry")`
+to cite the package and its parent engine.

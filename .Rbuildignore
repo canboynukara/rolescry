@@ -1,0 +1,10 @@
+^CITATION\.cff$
+^BUILD_STATUS\.md$
+^README\.Rmd$
+^doc$
+^Meta$
+^\.git$
+^\.gitignore$
+^.*\.Rproj$
+^\.Rproj\.user$
+^LICENSE\.md$
