@@ -1,6 +1,23 @@
-.Rproj.user/
+# rolescry develop - keep dev scaffolding & non-source artifacts OUT of the public branch.
+# _dev2/_scratch/_validation hold held-out generators, protocols, confirmatory runners and
+# validation datasets behind the firewall - never public.
+/_audit/
+/_dev/
+/_dev2/
+/_scratch/
+/_validation/
+
+# R build artifacts
 *.Rcheck/
+build/
+/MD5
+inst/doc/
 *.tar.gz
+
+# libraries / session cruft
+**/lib/
 .Rhistory
 .RData
-.Ruserdata
+.Rproj.user/
+*.log
+*.output

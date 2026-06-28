@@ -14,7 +14,9 @@
     max_score = r$max_score %||% NA_real_,
     pct = r$pct %||% NA_real_,
     detected_by = r$detected_by %||% NA_character_,
-    components = r$breakdown %||% list()
+    components = r$breakdown %||% list(),
+    confidence = r$confidence %||% NA_real_,    # v0.1.1: relational-outcome calibrated confidence (B1)
+    reason = r$reason %||% NA_character_         # v0.1.1: identifiability-silence explanation
   )
 }
 
@@ -78,6 +80,13 @@ detect_roles <- function(data, name_bonus = NULL, verbose = FALSE) {
   if (ncol(data) < 1L) stop("detect_roles(): `data` has no columns.")
   if (!is.null(name_bonus) && !is.list(name_bonus)) {
     stop("detect_roles(): `name_bonus` must be NULL or a named list of keyword vectors.")
+  }
+  if (is.null(names(data)) || anyDuplicated(names(data))) {
+    # Robustness (AUREX): duplicate (or absent) column names make `data[[name]]`
+    # ambiguous and break value-based addressing; uniquify so every column is
+    # addressable. Detection is name-blind, so this never changes role
+    # assignment for the normal (unique-name) case (make.unique is a no-op).
+    names(data) <- make.unique(if (is.null(names(data))) rep("", ncol(data)) else names(data))
   }
   vi <- .build_var_info(data)
   res <- run_all_detections(data, vi, name_bonus = name_bonus, verbose = verbose)

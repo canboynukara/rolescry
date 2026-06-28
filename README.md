@@ -1,3 +1,8 @@
+<!-- EXPLORATORY / pre-D5 - NOT a validated release. -->
+> **rolescry 0.2.0.9000 - EXPLORATORY development line (pre-D5).** Accuracy figures are
+> out-of-sample development diagnostics, NOT citable. The confirmatory verdict requires
+> the frozen D5 run under a new pre-registration.
+
 # rolescry
 
 > Name-blind variable-role detection by data signature. *Data inspice, non nomen* -- inspect the data, not the name.

@@ -92,10 +92,6 @@ classify_value_type <- function(x) {
     H_norm = H_norm, med_len = med_len
   )
 }
-
-# Ax1 score-gap helper: mathematical signature must dominate (>= 0.90) and the
-# name bonus must be capped (<= 0.10). Ported from categorical_detector.R:150.
-score_gap_ok <- function(math_score, name_bonus) {
-  is.numeric(math_score) && is.numeric(name_bonus) &&
-    math_score >= 0.90 && name_bonus <= 0.10
-}
+# (v0.1.1 AUREX) Removed dead `score_gap_ok` helper: defined but never called by
+# any detector (the <=10% name-bonus cap is enforced directly in .name_bonus_pts
+# via max_pts=10). Dead-code removal; no behavioral change.

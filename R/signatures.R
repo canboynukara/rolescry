@@ -50,6 +50,8 @@
 
 .score_group_signature <- function(column) {
   bd <- list()
+  # C3: numeric low-card extension REVERTED (regressed sim group_var; see .detect_group_var).
+  # A grouping variable is scored only from categorical/factor values.
   if (is.null(column) || (!is.character(column) && !is.factor(column))) {
     return(list(score = 0, max = 100, pct = 0, breakdown = list()))
   }
@@ -107,7 +109,8 @@
     return(list(score = 0, max = 100, pct = 0, breakdown = list()))
   }
   tv <- as.numeric(tv)
-  ev <- as.numeric(as.character(ev))
+  ev <- .normalize_event(ev)                              # C3: normalize coding to {0,1}
+  if (is.null(ev)) return(list(score = 0, max = 100, pct = 0, breakdown = list()))
   n <- sum(stats::complete.cases(cbind(tv, ev)))
   if (n < 10) {
     return(list(score = 0, max = 100, pct = 0, breakdown = list()))
@@ -128,6 +131,7 @@
     },
     error = function(e) 0
   )
+  if (!is.finite(skew)) skew <- 0                       # v0.1.1: guard NaN/Inf (sd==0) -> no crash
   s2_pos <- if (all_pos) 10L else 0L
   s2_skew <- if (skew > 0.3) min(10L, round(10 * min(1, skew / 2))) else 0L
   s2 <- s2_pos + s2_skew
@@ -257,12 +261,14 @@
   bd[[2]] <- list(name = "Mean inter-r", score = s2, max = 20, detail = sprintf("r=%.2f", ifelse(is.na(mean_r), 0, mean_r)))
 
   col_means <- colMeans(mat, na.rm = TRUE)
-  cv_means <- if (mean(col_means) != 0) stats::sd(col_means) / abs(mean(col_means)) else Inf
+  mcm <- mean(col_means)                                 # AUREX: guard NaN-in-if (mixed +/-Inf column)
+  cv_means <- if (is.finite(mcm) && mcm != 0) stats::sd(col_means) / abs(mcm) else Inf
   s3 <- if (is.finite(cv_means) && cv_means < 1) round(20 * (1 - cv_means)) else 0L
   bd[[3]] <- list(name = "Mean similarity", score = s3, max = 20, detail = sprintf("CV=%.2f", ifelse(is.finite(cv_means), cv_means, Inf)))
 
   col_sds <- apply(mat, 2, stats::sd, na.rm = TRUE)
-  cv_sds <- if (mean(col_sds) > 0) stats::sd(col_sds) / mean(col_sds) else Inf
+  msd <- mean(col_sds)                                   # AUREX: guard NaN-in-if
+  cv_sds <- if (is.finite(msd) && msd > 0) stats::sd(col_sds) / msd else Inf
   s4 <- if (is.finite(cv_sds) && cv_sds < 1) round(20 * (1 - cv_sds)) else 0L
   bd[[4]] <- list(name = "SD similarity", score = s4, max = 20, detail = sprintf("CV=%.2f", ifelse(is.finite(cv_sds), cv_sds, Inf)))
 
