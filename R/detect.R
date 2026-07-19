@@ -392,10 +392,10 @@
   numu <- var_info$column[var_info$user_type %in% c("Continuous", "Ordinal", "Binary")]
   if (length(numu) < 3) return(none(0, "too few columns for a collider"))
 
-  bits  <- setNames(numeric(length(cands)), cands)   # MDL bits saved vs the null (marginal) model
-  ksel  <- setNames(integer(length(cands)), cands)   # number of MDL-selected predictors
-  indep <- setNames(rep(TRUE, length(cands)), cands)  # continuous: the selected causes must be mutually independent
-  toppred <- setNames(rep(NA_character_, length(cands)), cands)  # top MDL predictor name (for ANM direction annotation)
+  bits  <- stats::setNames(numeric(length(cands)), cands)   # MDL bits saved vs the null (marginal) model
+  ksel  <- stats::setNames(integer(length(cands)), cands)   # number of MDL-selected predictors
+  indep <- stats::setNames(rep(TRUE, length(cands)), cands)  # continuous: the selected causes must be mutually independent
+  toppred <- stats::setNames(rep(NA_character_, length(cands)), cands)  # top MDL predictor name (for ANM direction annotation)
   for (y in cands) {
     preds <- setdiff(numu, y)
     if (length(preds) < MIN_PRED) next

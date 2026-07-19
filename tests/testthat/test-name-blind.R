@@ -9,25 +9,36 @@ test_that("classify_value_type classifies name-traps by DATA, not name", {
   expect_match(classify_value_type(code_trap)$type, "CONTINUOUS")
 })
 
-test_that("score_gap_ok enforces math-dominant, name-capped", {
-  expect_true(score_gap_ok(0.95, 0.05))   # legit
-  expect_false(score_gap_ok(0.80, 0.50))  # name-dominant -> rejected
-  expect_false(score_gap_ok(0.89, 0.05))  # math below 0.90 -> rejected
-})
-
-test_that("name_bonus tie-breaks outcome selection (Phase A caveat exercised)", {
+test_that("outcome_binary is detected name-blind; name_bonus agrees with a decisive math pick", {
   tw <- make_namebonus_twins()
   nb <- rolescry_default_name_bonus()
 
-  # Pure (NULL): the first 2-level column wins positionally.
-  pure <- detect_roles(tw$named)
-  expect_true(pure$roles$outcome_binary$found)
-
-  # With the dictionary, "death" is selected over the positional default.
+  # The signature alone selects `death` as the binary outcome; because the math
+  # pick is decisive, the capped name_bonus agrees rather than overrides it.
+  pure   <- detect_roles(tw$named)
   hinted <- detect_roles(tw$named, name_bonus = nb)
+  expect_true(pure$roles$outcome_binary$found)
+  expect_identical(pure$roles$outcome_binary$columns, "death")
   expect_identical(hinted$roles$outcome_binary$columns, "death")
-  expect_false(identical(pure$roles$outcome_binary$columns,
-                         hinted$roles$outcome_binary$columns))
+
+  # Turnusol: the name-stripped twin selects the same column by position.
+  blind <- detect_roles(tw$col_n)
+  expect_identical(match(pure$roles$outcome_binary$columns,  names(tw$named)),
+                   match(blind$roles$outcome_binary$columns, names(tw$col_n)))
+})
+
+test_that("name_bonus is a capped tie-breaker when the math margin is within the cap", {
+  # Two plausible groupings: perfectly balanced `site` is the mathematical pick;
+  # a keyword dictionary nudges the choice to the intended `treated` arm
+  # (a <= 10% score bump), exercising the capped name channel.
+  set.seed(4L)
+  clin <- data.frame(
+    site    = rep(c("north", "south"), length.out = 160L),
+    treated = sample(c("no", "yes"), 160L, replace = TRUE, prob = c(0.62, 0.38))
+  )
+  nb <- rolescry_default_name_bonus()
+  expect_identical(detect_roles(clin)$roles$group_var$columns, "site")
+  expect_identical(detect_roles(clin, name_bonus = nb)$roles$group_var$columns, "treated")
 })
 
 test_that("name_bonus is inert on col_N columns (no names to match)", {

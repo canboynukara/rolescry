@@ -45,6 +45,11 @@ each column's value signature.
   separately registered question. Two limitations are disclosed: `event_variable`
   fell just outside its pre-registered calibration band, and `covariate` remains
   inadmissible (high false-positive rate) and is excluded from the headline.
+* Packaging only (no algorithm change): the CRAN 0.2.0 source differs from the
+  archived analytic snapshot (git tag `v.0.2.0`; Zenodo 10.5281/zenodo.21003941)
+  in corrected vignette example data, test expectations aligned with the current
+  detector, a `stats::` import, and an updated `.Rbuildignore`. Detection
+  behaviour, its thresholds, and the confirmatory results above are unchanged.
 
 ## Citation
 

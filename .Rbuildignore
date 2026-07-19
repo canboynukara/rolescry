@@ -7,3 +7,4 @@
 ^\.git$
 ^\.gitignore$
 ^CITATION\.cff$
+^cran-comments\.md$

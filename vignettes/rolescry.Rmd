@@ -30,11 +30,12 @@ package's keystone test.
 ## A worked example
 
 ```{r example}
+set.seed(1)
+pre  <- rnorm(100, 10, 2)          # a measurement, before ...
 d <- data.frame(
-  arm  = rep(c(0, 1), each = 50),  # a balanced 2-level grouping
-  pre  = rnorm(100, 10, 2),        # measured before ...
-  post = rnorm(100, 11, 2),        # ... and after (paired)
-  resp = rbinom(100, 1, 0.4)       # a binary response
+  arm  = rep(c("control", "treatment"), each = 50),  # a balanced 2-level grouping
+  pre  = pre,
+  post = pre + rnorm(100, 1, 1)                       # ... and again after (paired with pre)
 )
 
 res <- detect_roles(d)
@@ -87,6 +88,7 @@ is comparable across variables with different numbers of levels. It is exposed
 directly:
 
 ```{r nmi}
+set.seed(2)
 g <- sample(c("A", "B", "C"), 300, replace = TRUE)
 y <- ifelse(g == "A", "event", sample(c("event", "none"), 300, replace = TRUE))
 compute_nmi(g, y)          # > 0: g informs y
@@ -101,13 +103,18 @@ pass a keyword dictionary via `name_bonus`. Names then act only as a small,
 score); the mathematical signature still dominates (>= 90%), the relationship
 enforced by `score_gap_ok()`.
 
+Here two columns both look like groupings; the data alone picks the perfectly
+balanced `site`, but a keyword dictionary nudges the choice to the intended
+treatment arm:
+
 ```{r namebonus}
+set.seed(4)
 clin <- data.frame(
-  male  = rbinom(120, 1, 0.5),      # a demographic binary (first)
-  death = rbinom(120, 1, 0.3)       # the intended outcome
+  site    = rep(c("north", "south"), length.out = 160),  # perfectly balanced (the math pick)
+  treated = sample(c("no", "yes"), 160, replace = TRUE, prob = c(0.62, 0.38))
 )
-detect_roles(clin)$roles$outcome_binary$columns                                  # positional default
-detect_roles(clin, name_bonus = rolescry_default_name_bonus())$roles$outcome_binary$columns  # "death"
+detect_roles(clin)$roles$group_var$columns                                  # data alone -> "site"
+detect_roles(clin, name_bonus = rolescry_default_name_bonus())$roles$group_var$columns  # name nudge -> "treated"
 ```
 
 ## Header-aware loading
