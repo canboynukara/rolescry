@@ -1,8 +1,3 @@
-<!-- EXPLORATORY / pre-D5 - NOT a validated release. -->
-> **rolescry 0.2.0.9000 - EXPLORATORY development line (pre-D5).** Accuracy figures are
-> out-of-sample development diagnostics, NOT citable. The confirmatory verdict requires
-> the frozen D5 run under a new pre-registration.
-
 # rolescry
 
 > Name-blind variable-role detection by data signature. *Data inspice, non nomen* -- inspect the data, not the name.
@@ -16,11 +11,23 @@ inter-column structure), never the column names. Renaming every column to
 `col_1, col_2, ...` does not change the result. No large language models, no
 external data transmission; detection is deterministic.
 
+Detection is backed by two structural invariance guarantees -- renaming
+(RELABEL) and reordering (S_n) columns never change a result -- and a single
+pre-registered, held-out confirmatory run (OSF osf.io/8ecau) validated the
+estimator on a synthetic data-generating process. Real-data and external
+validity are a separate, ongoing question.
+
 Extracted from the MDStatR biostatistics engine.
 
 ## Installation
 
-From [r-universe](https://r-universe.dev):
+From CRAN:
+
+```r
+install.packages("rolescry")
+```
+
+From [r-universe](https://r-universe.dev) (development builds):
 
 ```r
 install.packages("rolescry", repos = "https://canboynukara.r-universe.dev")
@@ -92,10 +99,13 @@ guarantee.
 
 ## Citation & attribution
 
-Derived from Boynukara, C. (2026). MDStatR (v2.1.0 Veritas). Zenodo. https://doi.org/10.5281/zenodo.20707791
+`rolescry` has its own archival DOI: **10.5281/zenodo.21003941** (Zenodo). It is
+derived from the MDStatR engine: Boynukara, C. (2026). *MDStatR (v2.1.0 Veritas).*
+Zenodo. https://doi.org/10.5281/zenodo.20707791
 
-Run `citation("rolescry")` to cite the package and its parent engine.
+Run `citation("rolescry")` to cite the package (with its archival DOI) and its
+parent engine.
 
 ## License
 
-Apache License 2.0 (inherited from the parent MDStatR project). See `LICENSE.md`.
+Apache License 2.0, inherited from the parent MDStatR project.

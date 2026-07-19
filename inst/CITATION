@@ -1,11 +1,13 @@
-citHeader("To cite rolescry, cite the package and the parent MDStatR engine:")
+citHeader("To cite rolescry, cite the package (with its archival DOI) and the parent MDStatR engine:")
 
 bibentry(
   bibtype = "Manual",
-  title   = "rolescry: Name-blind variable-role detection",
+  title   = "rolescry: Name-Blind Variable-Role Detection by Data Signature",
   author  = person("Can", "Boynukara"),
   year    = "2026",
-  note    = "R package"
+  note    = "R package version 0.2.0",
+  doi     = "10.5281/zenodo.21003941",
+  url     = "https://doi.org/10.5281/zenodo.21003941"
 )
 
 bibentry(
