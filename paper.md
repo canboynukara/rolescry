@@ -118,13 +118,15 @@ subject of a separate, separately pre-registered study.
 
 `rolescry` is distributed on CRAN under the Apache-2.0 licence, with source and
 issue tracker in the project repository and an archived release at Zenodo
-[@rolescryZenodo]. The package depends only on base R and its recommended
+[@rolescryZenodo]. The package depends only on base R [@R] and its recommended
 packages.
 
 # Acknowledgements
 
-`rolescry` is developed by a single author; benchmarking was author-conducted and
-its limitations (author-designed oracle, synthetic-only confirmatory scope) are
-documented in the validation materials. No funding is reported.
+`rolescry` is developed and maintained by its lead author. The author thanks
+M. Yasir Ceyhan for helpful discussion and feedback during the project.
+Benchmarking was author-conducted and its limitations (author-designed oracle,
+synthetic-only confirmatory scope) are documented in the validation materials.
+No funding is reported.
 
 # References
