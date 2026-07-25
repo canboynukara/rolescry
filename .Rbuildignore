@@ -8,3 +8,4 @@
 ^\.gitignore$
 ^CITATION\.cff$
 ^cran-comments\.md$
+^LICENSE\.md$
