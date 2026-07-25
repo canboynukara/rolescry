@@ -9,3 +9,5 @@
 ^CITATION\.cff$
 ^cran-comments\.md$
 ^LICENSE\.md$
+^paper\.md$
+^paper\.bib$
