@@ -21,9 +21,13 @@ validity are a separate, ongoing question.
 
 `rolescry` began as a variable-role detection component written during development of
 MDStatR, an unreleased personal research codebase by the same author. It was separated
-into an independent project, and for version 0.2.0 its detection engine was rebuilt on
-an information-theoretic basis: minimum description length scoring over a
-distance-correlation dependency backbone.
+into an independent project and is released on its own terms.
+
+Version 0.2.0 rebuilt part of the detection engine on an information-theoretic basis:
+measurement-pair and outcome detection now run on minimum description length scoring over
+a distance-correlation dependency backbone, with an additive-noise-model direction test and
+a bit-margin abstention rule. The remaining role detectors still use the original signature
+scorers, and the source files record that provenance individually.
 
 For anyone evaluating or using `rolescry`, the practical position is:
 
