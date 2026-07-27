@@ -130,3 +130,6 @@ degrade gracefully if they are not installed.
 `rolescry` is derived from Boynukara, C. (2026). *MDStatR* (v2.1.0 Veritas).
 Zenodo. <https://doi.org/10.5281/zenodo.20707791>. Run `citation("rolescry")`
 to cite the package and its parent engine.
+
+`rolescry` has no MDStatR dependency and requires only base R; see
+"Relationship to MDStatR" in the README.

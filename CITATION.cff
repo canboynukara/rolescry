@@ -6,7 +6,7 @@ version: 0.2.0
 doi: 10.5281/zenodo.21003941
 license: Apache-2.0
 repository-code: "https://github.com/canboynukara/rolescry"
-abstract: "Deterministic, name-blind variable-role detection for tabular datasets via information-theoretic signatures (Shannon entropy, normalized mutual information, distributional shape). Extracted from the MDStatR biostatistics engine. No LLMs, no external data transmission."
+abstract: "Deterministic, name-blind variable-role detection for tabular datasets via information-theoretic signatures (Shannon entropy, normalized mutual information, distributional shape). Developed from work on the author's unreleased MDStatR research code; no MDStatR dependency. No LLMs, no external data transmission."
 authors:
   - family-names: Boynukara
     given-names: Can

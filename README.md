@@ -17,7 +17,27 @@ pre-registered, held-out confirmatory run (OSF osf.io/8ecau) validated the
 estimator on a synthetic data-generating process. Real-data and external
 validity are a separate, ongoing question.
 
-Extracted from the MDStatR biostatistics engine.
+## Relationship to MDStatR
+
+`rolescry` began as a variable-role detection component written during development of
+MDStatR, an unreleased personal research codebase by the same author. It was separated
+into an independent project, and for version 0.2.0 its detection engine was rebuilt on
+an information-theoretic basis: minimum description length scoring over a
+distance-correlation dependency backbone.
+
+For anyone evaluating or using `rolescry`, the practical position is:
+
+- **No dependency.** `rolescry` requires only base R (`stats`, `utils`). It does not
+  import, link to or call MDStatR, and MDStatR is not needed to install, run, test or
+  understand it.
+- **No overlapping distributed software.** MDStatR is not publicly released and is not
+  installable; it is archived on Zenodo as a record only. No other package duplicates
+  `rolescry`'s functionality.
+- **Its own contracts and evidence.** The relabelling-invariance and permutation-
+  equivariance guarantees, the test suite that enforces them, and the pre-registered
+  evaluation belong to `rolescry` and have no counterpart in MDStatR.
+
+The MDStatR reference is retained to attribute intellectual origin, nothing more.
 
 ## Installation
 
@@ -108,4 +128,4 @@ parent engine.
 
 ## License
 
-Apache License 2.0, inherited from the parent MDStatR project.
+Apache License 2.0.

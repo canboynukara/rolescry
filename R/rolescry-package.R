@@ -13,7 +13,9 @@
 #' optional, capped (<= 10 percent) name bonus (see the \code{name_bonus}
 #' argument).
 #'
-#' Extracted from the MDStatR biostatistics engine.
+#' Developed from work on the author's unreleased MDStatR research code; see the
+#' README section "Relationship to MDStatR". rolescry requires only base R and
+#' has no MDStatR dependency.
 #'
 #' @keywords internal
 "_PACKAGE"

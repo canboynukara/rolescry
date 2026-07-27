@@ -7,6 +7,21 @@
 # equivalent. The optional capped name bonus is threaded into the
 # candidate-selecting detectors (group, outcome, subject id, survival); with
 # name_bonus = NULL it is a no-op (purely mathematical). No exports.
+#
+# v0.2.0 state (the port is PARTLY superseded, so read the two layers apart):
+#   * REBUILT on the information-theoretic footing -- .detect_pairs_generic
+#     (paired + agreement) now accepts on the derived MDL criterion
+#     .mdl_pair_bits + the structural agreement condition, with a .dep
+#     (distance-correlation) fallback for non-Gaussian margins; .detect_outcome
+#     is a full rewrite on .mdl_forward_gauss / .mdl_set_independent / .dcor_t
+#     with .anm_direction for orientation. Neither uses the ported pct >= 30
+#     accept any more.
+#   * STILL THE PORTED points-based scorers, with the v0.1.0 pct >= 30 accept
+#     preserved verbatim -- .detect_group_var, .detect_survival_components,
+#     .detect_repeated_measures, .detect_scale_items, and the
+#     run_all_detections fallback. These call into signatures.R, which is
+#     itself unchanged v0.1.0 logic.
+# Origin: see "Relationship to MDStatR" in README.md
 
 .detect_group_var <- function(data, var_info, name_bonus = NULL) {
   # D-A (council ruling, Tier-3 boundary): group_var conceptually SPLITS into (i) a DESIGNED,
