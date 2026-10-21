@@ -2,8 +2,8 @@ cff-version: 1.2.0
 message: "If you use this software, please cite rolescry (via its archival DOI) and the parent MDStatR engine it is derived from."
 title: rolescry
 type: software
-version: 0.2.0
-doi: 10.5281/zenodo.21003941
+version: 0.3.0
+doi: 10.5281/zenodo.23540121
 license: Apache-2.0
 repository-code: "https://github.com/canboynukara/rolescry"
 abstract: "Deterministic, name-blind variable-role detection for tabular datasets via information-theoretic signatures (Shannon entropy, normalized mutual information, distributional shape). Developed from work on the author's unreleased MDStatR research code; no MDStatR dependency. No LLMs, no external data transmission."
@@ -13,9 +13,8 @@ authors:
     orcid: "https://orcid.org/0000-0002-6075-3923"
 identifiers:
   - type: doi
-    value: 10.5281/zenodo.21003941
-    description: "Archival DOI for the rolescry v0.2.0 code (Zenodo)."
-# Contributor (not a citation author): M. Yasir Ceyhan, ORCID 0009-0008-0985-9838
+    value: 10.5281/zenodo.23540121
+    description: "Archival DOI for the rolescry v0.3.0 code (Zenodo); concept DOI for all versions: 10.5281/zenodo.20737629."
 references:
   - type: software
     title: MDStatR

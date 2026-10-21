@@ -1,3 +1,7 @@
+# rolescry 0.3.0.9000 (development)
+
+* `inst/CITATION` now cites the Zenodo concept DOI 10.5281/zenodo.20737629 (all versions); `CITATION.cff` records the v0.3.0 DOI 10.5281/zenodo.23540121.
+
 # rolescry 0.3.0
 
 Corrections so that the package does what its documentation says, found by running it on
