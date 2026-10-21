@@ -1,0 +1,220 @@
+d <- data.frame(id = 1:40, arm = rep(c("a","b"), 20), pre = rnorm(40), post = rnorm(40), y = rbinom(40, 1, .4))
+test_that("verify_roles validates its inputs", {
+  expect_error(verify_roles(1, list()), "verify_roles\\(\\)")
+  expect_error(verify_roles(d, list(bogus = "id")), "bogus")
+  expect_error(verify_roles(d, list(subject_id = "nope")), "nope")
+  expect_error(verify_roles(d, list(subject_id = c("id", "arm"))), "length")
+  expect_error(verify_roles(d, list(paired_pairs = c("pre", "pre"))), "identical")
+  dd <- d; names(dd)[2] <- "id"; expect_error(verify_roles(dd, list(subject_id = "id")), "duplicate")
+})
+test_that("claim rows: one per scalar/set role, one per pair", {
+  r <- rolescry:::.claim_rows(list(subject_id = "id", paired_pairs = list(c("pre","post"), c("y","pre")), covariate = c("arm","y")))
+  expect_equal(nrow(r), 4L); expect_equal(r$role, c("subject_id","paired_pairs","paired_pairs","covariate"))
+})
+test_that("the object has the documented shape and prints", {
+  v <- verify_roles(d, list(subject_id = "id", group_var = "arm"))
+  expect_s3_class(v, "role_verification")
+  expect_named(v$table, c("role","columns","verdict","sub_reason","statistic","reason","blind"))
+  expect_named(v$counts, c("claims","testable","contradicted","consistent","unverifiable"))
+  expect_equal(unname(v$counts["claims"]), 2)
+  expect_output(print(v), "claims")
+  expect_s3_class(summary(v), "data.frame")
+})
+
+mk_rct <- function(n = 300L, seed = 21L) { set.seed(seed); arm <- rep(c("drug","placebo"), each = n/2)
+  age <- round(rnorm(n, 60, 10)); b <- rnorm(n, 150, 15); e <- b - 10 * (arm == "drug") + rnorm(n, 0, 8)
+  data.frame(id = sample.int(99999, n), arm, age, sbp_base = b, sbp_end = e, y = rbinom(n, 1, plogis(-1 + 0.05 * (e - 140)))) }
+mk_surv <- function(n = 300L, seed = 22L) { set.seed(seed); x <- rnorm(n); t <- rweibull(n, 1.3, exp(5 - .5 * x)); c <- runif(n, 0, quantile(t, .9))
+  data.frame(age = round(rnorm(n, 60, 9)), x, time = round(pmin(t, c), 1), dead = as.integer(t <= c)) }
+test_that("paired claim on a real pre/post pair is consistent; on two unrelated columns contradicted", {
+  d <- mk_rct(); v <- verify_roles(d, list(paired_pairs = c("sbp_base","sbp_end")))
+  expect_equal(v$table$verdict, "consistent"); expect_match(v$table$statistic, "^bits=")
+  w <- verify_roles(d, list(paired_pairs = c("age","sbp_end")))
+  expect_equal(w$table$verdict, "contradicted"); expect_match(w$table$reason, "share no information")
+})
+test_that("survival pair: consistent when decisive, contradicted when independent, coverage when claimed alone", {
+  d <- mk_surv(); v <- verify_roles(d, list(time_variable = "time", event_variable = "dead"))
+  expect_equal(v$table$verdict, c("consistent","consistent"))
+  w <- verify_roles(d, list(time_variable = "age", event_variable = "dead"))   # no association is not a falsification
+  expect_true(all(w$table$verdict == "unverifiable")); expect_true(all(w$table$sub_reason == "coverage"))
+  expect_match(w$table$reason[1], "constant-hazard")
+  u <- verify_roles(d, list(time_variable = "time"))
+  expect_equal(u$table$verdict, "unverifiable"); expect_equal(u$table$sub_reason, "coverage")
+})
+test_that("design roles are never consistent; structural impossibilities are contradicted", {
+  d <- mk_rct()
+  v <- verify_roles(d, list(group_var = "arm", outcome_binary = "y", outcome_continuous = "sbp_end", covariate = "age"))
+  expect_true(all(v$table$verdict == "unverifiable")); expect_true(all(v$table$sub_reason == "identifiability"))
+  w <- verify_roles(d, list(group_var = "id", outcome_binary = "age", outcome_continuous = "arm"))
+  expect_true(all(w$table$verdict == "contradicted"))
+  g <- verify_roles(transform(d, dose = sample(1:4, nrow(d), TRUE)), list(group_var = "dose"))
+  expect_equal(g$table$sub_reason, "identifiability"); expect_match(g$table$reason, "numeric-coded")
+})
+test_that("subject_id: unique column consistent, repeated column contradicted", {
+  d <- mk_rct(); expect_equal(verify_roles(d, list(subject_id = "id"))$table$verdict, "consistent")
+  a <- verify_roles(d, list(subject_id = "arm"))$table     # repeats, no panel detected: coverage
+  expect_equal(a$verdict, "unverifiable"); expect_equal(a$sub_reason, "coverage"); expect_match(a$reason, "undetected long panel")
+})
+test_that("repeated_measures and scale_items on claimed sets", {
+  set.seed(23L); n <- 200L; s <- rnorm(n, 50, 10)
+  w <- data.frame(id = sample.int(9999, n), v1 = s + rnorm(n, 0, 3), v2 = s + 2 + rnorm(n, 0, 3), v3 = s + 4 + rnorm(n, 0, 3), z = rnorm(n))
+  expect_equal(verify_roles(w, list(repeated_measures = c("v1","v2","v3")))$table$verdict, "consistent")
+  expect_equal(verify_roles(w, list(repeated_measures = c("v1","z","id")))$table$verdict, "contradicted")
+  lat <- rnorm(n); q <- as.data.frame(sapply(1:5, function(i) pmin(5, pmax(1, round(3 + 0.9 * lat + rnorm(n, 0, .8)))))); names(q) <- paste0("q", 1:5); q$x <- rnorm(n)
+  expect_equal(verify_roles(q, list(scale_items = paste0("q", 1:5)))$table$verdict, "consistent")
+  r <- as.data.frame(replicate(4, sample(1:5, n, TRUE))); names(r) <- paste0("r", 1:4)
+  expect_equal(verify_roles(r, list(scale_items = paste0("r", 1:4)))$table$verdict, "contradicted")
+})
+test_that("time_index, all-NA column, single-column frame, unclaimed structure, counts", {
+  d <- mk_rct(); d$date <- as.Date("2024-01-01") + seq_len(nrow(d)); d$empty <- NA_real_
+  v <- verify_roles(d, list(time_index = "date", covariate = "empty", group_var = "arm"))
+  expect_equal(v$table$verdict[1], "consistent"); expect_equal(v$table$verdict[2], "unverifiable")
+  expect_equal(v$table$sub_reason[2], "coverage"); expect_match(v$table$reason[2], "No observed values")
+  expect_true(any(v$unclaimed$role == "paired_pairs"))        # sbp_base/sbp_end found, not claimed
+  expect_true(all(v$unclaimed$role != "covariate"))
+  expect_equal(unname(v$counts["claims"]), 3)
+  one <- data.frame(a = rnorm(30)); expect_s3_class(verify_roles(one, list(covariate = "a")), "role_verification")
+})
+test_that("verdicts are name-blind and permutation-invariant", {
+  d <- mk_rct(); claim <- list(subject_id = "id", paired_pairs = c("sbp_base","sbp_end"), group_var = "arm", outcome_binary = "y")
+  v <- verify_roles(d, claim)
+  set.seed(5L); perm <- sample(ncol(d)); dp <- d[, perm]; names(dp) <- paste0("c", seq_along(dp))
+  remap <- function(x) paste0("c", match(match(x, names(d)), perm))
+  cp <- lapply(claim, remap)
+  vp <- verify_roles(dp, cp)
+  expect_equal(v$table[, c("role","verdict","sub_reason","statistic")], vp$table[, c("role","verdict","sub_reason","statistic")])
+  expect_equal(v$counts, vp$counts)
+})
+
+sub <- function(v, col) v$table[[col]]
+test_that("input edge cases: empty claim, NA, duplicates", {
+  d <- mk_rct()
+  e <- verify_roles(d, list()); expect_equal(unname(e$counts["claims"]), 0); expect_output(print(e), "0 claims")
+  expect_equal(unname(verify_roles(d, list(paired_pairs = list()))$counts["claims"]), 0)
+  expect_error(verify_roles(d, list(paired_pairs = c("age", NA))), "NA")
+  expect_error(verify_roles(d, list(repeated_measures = c("age", "age", "age"))), "duplicate columns")
+  expect_error(verify_roles(d, list(subject_id = "id", subject_id = "arm")), "duplicate role key")
+})
+test_that("pairs: agreement label, shift note, differ-more-than-agree", {
+  set.seed(31); n <- 200; a <- rnorm(n, 100, 15); b <- a + rnorm(n, 0, 4); b2 <- a + 10 + rnorm(n, 0, 4)
+  v <- verify_roles(data.frame(a, b), list(agreement_pairs = c("a", "b")))
+  expect_equal(sub(v, "verdict"), "consistent"); expect_false(grepl("Shift bits", sub(v, "reason")))
+  w <- verify_roles(data.frame(a, b2), list(agreement_pairs = c("a", "b2")))
+  expect_equal(sub(w, "verdict"), "consistent"); expect_match(sub(w, "reason"), "Shift bits suggest paired_pairs")
+  x <- verify_roles(data.frame(a, b), list(paired_pairs = c("a", "b")))
+  expect_match(sub(x, "reason"), "Shift bits suggest agreement_pairs")
+  nb <- -a + rnorm(n, 0, .2); y <- verify_roles(data.frame(a, nb), list(paired_pairs = c("a", "nb")))
+  expect_equal(sub(y, "verdict"), "contradicted"); expect_match(sub(y, "reason"), "differ more than they agree")
+})
+test_that("coupled_pair: consistent, contradicted, coverage", {
+  d <- mk_surv()
+  expect_equal(sub(verify_roles(d, list(coupled_pair = c("time", "dead"))), "verdict"), "consistent")
+  expect_equal(sub(verify_roles(d, list(coupled_pair = c("age", "dead"))), "verdict"), "contradicted")
+  u <- verify_roles(d, list(coupled_pair = c("age", "x")))
+  expect_equal(sub(u, "verdict"), "unverifiable"); expect_equal(sub(u, "sub_reason"), "coverage")
+})
+test_that("survival: decisive=FALSE coverage, bad event, non-positive time, non-numeric time", {
+  set.seed(32); n <- 200; t <- rnorm(n, 50, 5); ev <- rbinom(n, 1, plogis((t - 50) / 2))
+  v <- verify_roles(data.frame(t, ev), list(time_variable = "t", event_variable = "ev"))
+  expect_equal(sub(v, "verdict"), c("unverifiable", "unverifiable")); expect_equal(sub(v, "statistic"), c("decisive=FALSE", "decisive=FALSE"))
+  expect_equal(sub(v, "sub_reason"), c("coverage", "coverage"))
+  w <- verify_roles(data.frame(t, ev = rnorm(n)), list(time_variable = "t", event_variable = "ev"))
+  expect_true(all(sub(w, "verdict") == "contradicted")); expect_match(sub(w, "reason")[1], "two-level")
+  z <- verify_roles(data.frame(t = rnorm(n), ev), list(time_variable = "t", event_variable = "ev"))
+  expect_true(all(sub(z, "verdict") == "contradicted")); expect_match(sub(z, "reason")[1], "negative")
+  ch <- verify_roles(data.frame(t = as.character(t), ev), list(time_variable = "t", event_variable = "ev"))
+  expect_equal(sub(ch, "verdict")[1], "unverifiable"); expect_match(sub(ch, "reason")[1], "not numeric")
+})
+test_that("subject_id: coverage, panel cluster, ambiguous panel; repeated long panel", {
+  set.seed(33)
+  expect_equal(sub(verify_roles(data.frame(x = rnorm(30)), list(subject_id = "x")), "sub_reason"), "coverage")
+  set.seed(6)   # axis resolution of a near-balanced panel is seed-dependent (serial dependence decides)
+  np <- 40; k <- 5; lp <- data.frame(pid = rep(1:np, each = k), visit = rep(1:k, np))
+  lp$score <- rep(rnorm(np), each = k) + rnorm(np * k) + lp$visit; lp$other <- rnorm(nrow(lp))
+  lp <- lp[-sample(nrow(lp), 25), ]   # unbalanced: the entity/time axes are not value-symmetric
+  expect_equal(sub(verify_roles(lp, list(subject_id = "pid")), "verdict"), "consistent")
+  expect_equal(sub(verify_roles(lp, list(repeated_measures = "score")), "verdict"), "consistent")
+  expect_equal(sub(verify_roles(lp, list(repeated_measures = c("score", "pid"))), "verdict"), "contradicted")
+  set.seed(2); g <- expand.grid(a = 1:10, b = 1:10); g$v <- rnorm(100) + g$a + g$b
+  amb <- verify_roles(g, list(subject_id = "a"))
+  expect_equal(sub(amb, "sub_reason"), "coverage"); expect_match(sub(amb, "reason"), "axis ambiguous")
+})
+test_that("repeated wide: unequal scales, k<3, non-numeric", {
+  set.seed(34); n <- 300; s <- rnorm(n); w <- as.data.frame(sapply(1:4, function(i) .5 * s + rnorm(n)))
+  v <- verify_roles(w, list(repeated_measures = names(w)))
+  expect_equal(sub(v, "sub_reason"), "coverage"); expect_match(sub(v, "reason"), "unequal scales")
+  expect_equal(sub(verify_roles(w, list(repeated_measures = names(w)[1:2])), "sub_reason"), "coverage")
+  w$ch <- as.character(w$V1)
+  nn <- verify_roles(w, list(repeated_measures = c("V1", "V2", "ch")))
+  expect_equal(sub(nn, "verdict"), "unverifiable"); expect_match(sub(nn, "reason"), "not numeric")
+})
+test_that("scale_items binary and mixed", {
+  set.seed(35); n <- 200; lat <- rnorm(n)
+  bi <- as.data.frame(sapply(1:8, function(i) as.integer(lat + rnorm(n) > 0))); names(bi) <- paste0("b", 1:8)
+  v <- verify_roles(bi, list(scale_items = names(bi)))
+  expect_equal(sub(v, "verdict"), "unverifiable"); expect_equal(sub(v, "sub_reason"), "coverage")
+  expect_match(sub(v, "reason"), "no derived test")
+  expect_equal(sub(verify_roles(bi, list(scale_items = names(bi)[1:6])), "sub_reason"), "coverage")
+  k3 <- sample(1:3, n, TRUE); oh <- data.frame(h1 = as.integer(k3 == 1), h2 = as.integer(k3 == 2), h3 = as.integer(k3 == 3))
+  o <- verify_roles(oh, list(scale_items = names(oh)))
+  expect_equal(sub(o, "verdict"), "contradicted"); expect_equal(sub(o, "statistic"), "one_hot=TRUE")
+  mx <- data.frame(o1 = sample(1:5, n, TRUE), o2 = sample(1:5, n, TRUE), b = rbinom(n, 1, .5))
+  expect_equal(sub(verify_roles(mx, list(scale_items = names(mx))), "sub_reason"), "coverage")
+})
+test_that("also-claimed note, group B=NA, empty-evidence guards", {
+  d <- mk_rct()
+  v <- verify_roles(d, list(subject_id = "arm", group_var = "arm"))
+  expect_match(sub(v, "reason")[1], "Also claimed as group_var"); expect_match(sub(v, "reason")[2], "Also claimed as subject_id")
+  g <- data.frame(g = c(rep("x", 100), rep("y", 99), "z"), v = rnorm(200))
+  gv <- verify_roles(g, list(group_var = "g")); expect_equal(sub(gv, "statistic"), "B=NA")
+  e <- data.frame(a = rnorm(30), b = NA_real_, c = c(rep(NA, 25), rnorm(5)))
+  expect_equal(sub(verify_roles(e, list(paired_pairs = c("a", "b"))), "sub_reason"), "coverage")
+  expect_match(sub(verify_roles(e, list(paired_pairs = c("a", "c"))), "reason"), "Fewer than 10")
+  expect_equal(sub(verify_roles(e, list(outcome_binary = "b")), "verdict"), "unverifiable")
+})
+
+test_that("final-review fixes: covariate set, survival counting, boundaries, prose", {
+  d <- mk_rct(); s <- mk_surv()
+  cv <- verify_roles(d, list(covariate = c("age", "y")))
+  expect_equal(nrow(cv$table), 1L); expect_equal(unname(cv$counts["claims"]), 1)
+  expect_equal(cv$table$statistic, "type=Continuous,Binary"); expect_equal(cv$table$sub_reason, "identifiability")
+  sv <- verify_roles(s, list(time_variable = "time", event_variable = "dead"))
+  expect_equal(nrow(sv$table), 2L); expect_equal(unname(sv$counts["claims"]), 1); expect_equal(unname(sv$counts["consistent"]), 1)
+  # n = 10 boundary: finite statistic, never contradicted on NA bits
+  set.seed(41); b <- data.frame(t = rexp(10) + .1, e = rep(0:1, 5))
+  bv <- verify_roles(b, list(time_variable = "t", event_variable = "e"))
+  expect_false(any(bv$table$verdict == "contradicted")); expect_false(any(grepl("NA", bv$table$statistic)))
+  # coupled pair with a non-numeric continuous member
+  cp <- verify_roles(data.frame(t = as.character(s$time), dead = s$dead), list(coupled_pair = c("t", "dead")))
+  expect_equal(cp$table$sub_reason, "coverage"); expect_match(cp$table$reason, "not numeric")
+  # zero follow-up times: note, verdict unchanged; negative time: contradicted
+  z <- s; z$time[1:3] <- 0
+  zv <- verify_roles(z, list(time_variable = "time", event_variable = "dead"))
+  expect_match(zv$table$reason[1], "3 zero follow-up times"); expect_equal(zv$table$verdict[1], "consistent")
+  ng <- s; ng$time[1] <- -1
+  expect_true(all(verify_roles(ng, list(time_variable = "time", event_variable = "dead"))$table$verdict == "contradicted"))
+  # subject_id contradicted only when a panel is detected and the column is not its cluster
+  set.seed(6); np <- 40; k <- 5; lp <- data.frame(pid = rep(1:np, each = k), visit = rep(1:k, np))
+  lp$score <- rep(rnorm(np), each = k) + rnorm(np * k) + lp$visit; lp$other <- rnorm(nrow(lp)); lp <- lp[-sample(nrow(lp), 25), ]
+  expect_equal(verify_roles(lp, list(subject_id = "visit"))$table$verdict, "contradicted")
+  expect_match(verify_roles(lp, list(repeated_measures = c("score", "pid")))$table$reason, "not the panel's measures")
+  # pair prose, constant column, widened unclaimed
+  p <- verify_roles(d, list(paired_pairs = c("sbp_base", "sbp_end")))
+  expect_match(p$table$reason, "difference is smaller than their mean")
+  cc <- d; cc$k <- 5
+  expect_match(verify_roles(cc, list(paired_pairs = c("sbp_base", "k")))$table$reason, "constant")
+  w <- verify_roles(d, list(paired_pairs = c("sbp_base", "age")))
+  expect_true(any(w$unclaimed$role == "paired_pairs" & w$unclaimed$columns == "sbp_base, sbp_end"))
+  expect_false(any(p$unclaimed$role == "paired_pairs"))
+  # ordinal scale with disjoint NAs: coverage, never contradicted
+  set.seed(42); n <- 200; lat <- rnorm(n)
+  q <- as.data.frame(sapply(1:5, function(i) pmin(5, pmax(1, round(3 + .9 * lat + rnorm(n, 0, .8))))))
+  names(q) <- paste0("q", 1:5); for (i in 1:5) q[((i - 1) * 40 + 1):(i * 40), i] <- NA
+  qv <- verify_roles(q, list(scale_items = names(q)))
+  expect_equal(qv$table$verdict, "unverifiable"); expect_equal(qv$table$sub_reason, "coverage")
+  # dCor route: a non-Gaussian pair whose closed form fails but dependence clears the floor
+  set.seed(14); zz <- rexp(300); a <- 2.6 * zz + rnorm(300, 0, .3)
+  expect_equal(rolescry:::.pair_admitted(a, zz)$route, "dcor-fallback")
+  dv <- verify_roles(data.frame(a, zz), list(paired_pairs = c("a", "zz")))
+  expect_equal(dv$table$verdict, "consistent"); expect_match(dv$table$statistic, "^T=")
+})

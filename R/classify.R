@@ -9,6 +9,7 @@
 # CONTINUOUS_NUMERIC, CATEGORICAL_SURVEY_RESPONSE, NOMINAL_WITH_TYPOS,
 # FREE_TEXT, NOMINAL_CATEGORICAL, CATEGORICAL_LIKELY, AMBIGUOUS_TEXT.
 classify_value_type <- function(x) {
+  if (is.logical(x)) x <- as.integer(x)        # 0.3.0: TRUE/FALSE is a {0,1} coding
   x_nm <- x[!is.na(x) & x != ""]
   n <- length(x_nm)
   if (n == 0) {

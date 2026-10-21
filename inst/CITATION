@@ -5,7 +5,7 @@ bibentry(
   title   = "rolescry: Name-Blind Variable-Role Detection by Data Signature",
   author  = person("Can", "Boynukara"),
   year    = "2026",
-  note    = "R package version 0.2.0",
+  note    = "R package version 0.3.0",
   doi     = "10.5281/zenodo.21003941",
   url     = "https://doi.org/10.5281/zenodo.21003941"
 )

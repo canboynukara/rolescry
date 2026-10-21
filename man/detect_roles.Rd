@@ -38,10 +38,22 @@ An S3 object of class \code{"role_detection"}: a list with
 \item{var_info}{data.frame(column, type) -- value-based column typing.}
 \item{roles}{named list; each entry has \code{found}, \code{columns},
 \code{score}, \code{max_score}, \code{pct}, \code{detected_by} and a
-\code{components} score breakdown.}
+\code{components} score breakdown. Meaning of \code{score}/\code{pct} per role:
+\code{group_var}: \code{score = pct = 100 * B} (normalized-entropy ranking;
+\code{max_score = 100}; there is no description-length test).
+Paired/agreement pairs, ordinal scale items and the outcomes: \code{score}
+is in bits, \code{max_score} is \code{NA}, and \code{pct} is the display map
+\code{100 * (1 - 2^(-bits/8))}. Survival, wide repeated measures and binary
+scale items (ported point scorers): \code{score} and \code{max_score} are
+points and \code{pct} is the points ratio.}
 \item{value_types}{named character vector of per-column value-type labels.}
 \item{potential_pairs}{list of candidate continuous column pairs with
-paired and agreement scores.}
+MDL pair bits and shift bits. The paired/agreement split is the sign of the
+shift bits, a BIC-type test of a mean difference between the two columns:
+\code{agreement_pairs} means "no detectable systematic shift", so a
+method-comparison pair with a real calibration bias is labelled
+\code{paired_pairs}, and the label depends on n. Exactly one pair is
+reported across the two roles.}
 \item{n_obs, n_var}{dataset dimensions.}
 }
 }
@@ -62,6 +74,26 @@ as a small, capped tie-breaker (at most a +10 point nudge, i.e. <= 10 percent,
 applied to candidate selection for the group, outcome, subject-id and
 survival roles) -- the reported confidence stays the mathematical signature.
 See \code{\link[=rolescry_default_name_bonus]{rolescry_default_name_bonus()}} for a ready-made dictionary.
+
+A column can hold more than one role (e.g. a measurement in both
+\code{paired_pairs} and \code{agreement_pairs}). The \code{covariate} role is
+residual: it lists the continuous, categorical and binary columns that no other
+role claimed. A role whose evidence does not single out a column is reported as
+not found rather than guessed.
+
+The \code{coupled_pair} role (0.3.0) reports a dependent pair of one binary and
+one positive continuous column whose reading is ambiguous: it may be a survival
+(time, event) pair or a (cause, binary outcome) pair, and the data alone cannot
+say which. The survival roles are assigned instead only when censoring geometry
+singles the survival reading out. The entry carries \code{continuous_col},
+\code{binary_col} and the two \code{interpretations}; the choice is the user's.
+
+The \code{time_index} role (0.3.0) reports calendar columns: Date/POSIXct
+classes, or character columns whose every value parses as a date. The class
+and format are properties of the values, so name-blindness is preserved. On a
+balanced long panel whose entity/time axes are value-symmetric, the axes are
+reported as ambiguous (\code{repeated_measures$panel_axes}) unless serial
+dependence of the measures singles one reading out.
 }
 \examples{
 set.seed(1)

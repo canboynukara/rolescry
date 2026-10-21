@@ -4,103 +4,6 @@
 # be approximate in the presence of ties"). All scoring is value-based; no
 # column names are read. No exports.
 
-.score_paired_signature <- function(a, b) {
-  bd <- list()
-  n <- sum(stats::complete.cases(cbind(a, b)))
-  if (n < 10) {
-    return(list(score = 0, max = 110, pct = 0, breakdown = list()))
-  }
-  r <- tryCatch(stats::cor(a, b, use = "complete.obs"), error = function(e) NA)
-  s1 <- if (!is.na(r) && r >= 0.3 && r <= 0.95) round(20 * min(1, (r - 0.1) / 0.6)) else 0L
-  bd[[1]] <- list(name = "Correlation", score = s1, max = 20, detail = sprintf("r=%.2f", ifelse(is.na(r), 0, r)))
-
-  cc <- stats::complete.cases(cbind(a, b))
-  d <- mean(a[cc] - b[cc], na.rm = TRUE)
-  pooled <- sqrt((stats::var(a, na.rm = TRUE) + stats::var(b, na.rm = TRUE)) / 2)
-  ratio <- if (!is.na(pooled) && pooled > 0) abs(d) / pooled else Inf
-  s2 <- if (is.finite(ratio) && ratio < 2) round(20 * (1 - ratio / 2)) else 0L
-  bd[[2]] <- list(name = "Mean diff ratio", score = s2, max = 20, detail = sprintf("%.2f", ifelse(is.finite(ratio), ratio, Inf)))
-
-  sd_a <- stats::sd(a, na.rm = TRUE)
-  sd_b <- stats::sd(b, na.rm = TRUE)
-  sdr <- if (!is.na(sd_a) && !is.na(sd_b) && sd_b > 1e-10) sd_a / sd_b else NA
-  s3 <- if (!is.na(sdr) && sdr >= 0.3 && sdr <= 3) round(20 * (1 - abs(log(sdr)) / log(3))) else 0L
-  bd[[3]] <- list(name = "SD similarity", score = s3, max = 20, detail = sprintf("ratio=%.2f", ifelse(is.na(sdr), 0, sdr)))
-
-  rng_a <- range(a, na.rm = TRUE)
-  rng_b <- range(b, na.rm = TRUE)
-  ov <- max(0, min(rng_a[2], rng_b[2]) - max(rng_a[1], rng_b[1]))
-  total_range <- max(rng_a[2], rng_b[2]) - min(rng_a[1], rng_b[1])
-  ov_pct <- if (total_range > 0) ov / total_range else 0
-  s4 <- if (ov_pct > 0.3) round(20 * min(1, ov_pct)) else 0L
-  bd[[4]] <- list(name = "Range overlap", score = s4, max = 20, detail = sprintf("%.0f%%", ov_pct * 100))
-
-  ks_p <- tryCatch(suppressWarnings(stats::ks.test(a[cc], b[cc])$p.value), error = function(e) 0)
-  if (is.na(ks_p)) ks_p <- 0
-  s5 <- if (ks_p > 0.05) round(15 * min(1, ks_p / 0.5)) else 0L
-  bd[[5]] <- list(name = "Distribution shape", score = s5, max = 15, detail = sprintf("KS p=%.3f", ks_p))
-
-  cpr <- n / max(length(a), 1)
-  s6 <- if (cpr > 0.7) round(15 * min(1, (cpr - 0.5) / 0.5)) else 0L
-  bd[[6]] <- list(name = "Complete pairs", score = s6, max = 15, detail = sprintf("%.0f%%", cpr * 100))
-
-  total <- s1 + s2 + s3 + s4 + s5 + s6
-  list(score = total, max = 110, pct = round(total / 110 * 100, 1), breakdown = bd)
-}
-
-.score_group_signature <- function(column) {
-  bd <- list()
-  # C3: numeric low-card extension REVERTED (regressed sim group_var; see .detect_group_var).
-  # A grouping variable is scored only from categorical/factor values.
-  if (is.null(column) || (!is.character(column) && !is.factor(column))) {
-    return(list(score = 0, max = 100, pct = 0, breakdown = list()))
-  }
-  vals <- column
-  vals <- vals[!is.na(vals)]
-  if (length(vals) < 5) {
-    return(list(score = 0, max = 100, pct = 0, breakdown = list()))
-  }
-  lvls <- unique(vals)
-  n_levels <- length(lvls)
-
-  s1 <- if (n_levels >= 2 && n_levels <= 10) {
-    if (n_levels <= 5) 25L else round(25 * (1 - (n_levels - 5) / 10))
-  } else {
-    0L
-  }
-  bd[[1]] <- list(name = "Level count", score = s1, max = 25, detail = sprintf("%d levels", n_levels))
-
-  counts <- table(vals)
-  balance <- min(counts) / max(counts)
-  s2 <- round(25 * min(1, balance / 0.5))
-  bd[[2]] <- list(name = "Balance", score = s2, max = 25, detail = sprintf("min/max=%.2f", balance))
-
-  props <- as.numeric(counts) / sum(counts)
-  entropy <- -sum(props * log2(props + 1e-10))
-  max_entropy <- log2(n_levels)
-  norm_entropy <- if (max_entropy > 0) entropy / max_entropy else 0
-  s3 <- if (norm_entropy > 0.5) round(20 * min(1, norm_entropy)) else 0L
-  bd[[3]] <- list(name = "Entropy", score = s3, max = 20, detail = sprintf("%.2f", norm_entropy))
-
-  is_nonnumeric <- !all(grepl("^-?[0-9.]+$", as.character(lvls)))
-  s4 <- if (is_nonnumeric) {
-    15L
-  } else {
-    if (n_levels <= 5) 10L else 0L
-  }
-  bd[[4]] <- list(name = "Non-numeric", score = s4, max = 15, detail = ifelse(is_nonnumeric, "TRUE", "FALSE"))
-
-  na_pct <- mean(is.na(column)) * 100
-  s5 <- if (na_pct < 5) 15L else if (na_pct < 20) round(15 * (1 - na_pct / 40)) else 0L
-  bd[[5]] <- list(name = "Completeness", score = s5, max = 15, detail = sprintf("%.1f%% NA", na_pct))
-
-  total <- s1 + s2 + s3 + s4 + s5
-  list(
-    score = total, max = 100, pct = round(total / 100 * 100, 1), breakdown = bd,
-    details = list(n_levels = n_levels, level_counts = as.numeric(counts))
-  )
-}
-
 .score_survival_signature <- function(time_col, event_col, data) {
   bd <- list()
   tv <- data[[time_col]]
@@ -168,76 +71,6 @@
   )
 }
 
-.score_agreement_signature <- function(a, b) {
-  bd <- list()
-  n <- sum(stats::complete.cases(cbind(a, b)))
-  if (n < 10) {
-    return(list(score = 0, max = 110, pct = 0, breakdown = list()))
-  }
-  cc <- stats::complete.cases(cbind(a, b))
-  ac <- a[cc]
-  bc <- b[cc]
-
-  r <- tryCatch(stats::cor(ac, bc), error = function(e) NA)
-  s1 <- if (!is.na(r) && r >= 0.3 && r <= 0.85) round(15 * min(1, (r - 0.1) / 0.5)) else if (!is.na(r) && r > 0.85) round(15 * max(0, 1 - (r - 0.85) / 0.15)) else 0L
-  bd[[1]] <- list(name = "Correlation", score = s1, max = 15, detail = sprintf("r=%.2f", ifelse(is.na(r), 0, r)))
-
-  diffs <- ac - bc
-  bias <- mean(diffs)
-  rng <- max(ac, bc) - min(ac, bc)
-  bias_ratio <- if (rng > 0) abs(bias) / rng else Inf
-  s2 <- if (is.finite(bias_ratio) && bias_ratio < 0.3) round(25 * (1 - bias_ratio / 0.3)) else 0L
-  bd[[2]] <- list(name = "BA bias/range", score = s2, max = 25, detail = sprintf("%.3f", ifelse(is.finite(bias_ratio), bias_ratio, Inf)))
-
-  sd_a <- stats::sd(ac)
-  sd_b <- stats::sd(bc)
-  sdr <- if (!is.na(sd_b) && sd_b > 1e-10) sd_a / sd_b else NA
-  s3 <- if (!is.na(sdr) && sdr >= 0.5 && sdr <= 2.0) round(20 * (1 - abs(log(sdr)) / log(2))) else 0L
-  bd[[3]] <- list(name = "SD ratio", score = s3, max = 20, detail = sprintf("%.2f", ifelse(is.na(sdr), 0, sdr)))
-
-  rng_a <- range(ac)
-  rng_b <- range(bc)
-  ov <- max(0, min(rng_a[2], rng_b[2]) - max(rng_a[1], rng_b[1]))
-  tr <- max(rng_a[2], rng_b[2]) - min(rng_a[1], rng_b[1])
-  ov_pct <- if (tr > 0) ov / tr else 0
-  s4 <- if (ov_pct > 0.5) round(20 * min(1, ov_pct)) else 0L
-  bd[[4]] <- list(name = "Range overlap", score = s4, max = 20, detail = sprintf("%.0f%%", ov_pct * 100))
-
-  icc_val <- tryCatch(
-    {
-      mat <- cbind(ac, bc)
-      k <- ncol(mat)
-      ni <- nrow(mat)
-      grand <- mean(mat)
-      ss_r <- k * sum((rowMeans(mat) - grand)^2)
-      ss_c <- ni * sum((colMeans(mat) - grand)^2)
-      ss_t <- sum((mat - grand)^2)
-      ss_e <- ss_t - ss_r - ss_c
-      ms_r <- ss_r / (ni - 1)
-      ms_e <- ss_e / ((ni - 1) * (k - 1))
-      ms_c <- ss_c / (k - 1)
-      (ms_r - ms_e) / (ms_r + (k - 1) * ms_e + k * (ms_c - ms_e) / ni)
-    },
-    error = function(e) NA
-  )
-  s5 <- if (!is.na(icc_val) && icc_val > 0.3) round(15 * min(1, icc_val)) else 0L
-  bd[[5]] <- list(name = "ICC(2,1)", score = s5, max = 15, detail = sprintf("%.2f", ifelse(is.na(icc_val), 0, icc_val)))
-
-  kurt_diff <- tryCatch(
-    {
-      k_a <- mean((ac - mean(ac))^4) / (stats::sd(ac)^4) - 3
-      k_b <- mean((bc - mean(bc))^4) / (stats::sd(bc)^4) - 3
-      abs(k_a - k_b)
-    },
-    error = function(e) Inf
-  )
-  s6 <- if (is.finite(kurt_diff) && kurt_diff < 2) round(15 * (1 - kurt_diff / 2)) else 0L
-  bd[[6]] <- list(name = "Kurtosis similarity", score = s6, max = 15, detail = sprintf("diff=%.2f", ifelse(is.finite(kurt_diff), kurt_diff, Inf)))
-
-  total <- s1 + s2 + s3 + s4 + s5 + s6
-  list(score = total, max = 110, pct = round(total / 110 * 100, 1), breakdown = bd)
-}
-
 .score_repeated_signature <- function(col_list, data) {
   bd <- list()
   if (length(col_list) < 3) {
@@ -283,9 +116,12 @@
   list(score = total, max = 120, pct = round(total / 120 * 100, 1), breakdown = bd)
 }
 
+# Used by the binary IRT path of .detect_scale_items only (pending a Bernoulli one-latent code).
 .score_scale_items_signature <- function(col_list, data) {
   bd <- list()
-  if (length(col_list) < 5) {
+  # 0.3.0: 3-4 item short batteries (e.g. multi-agency ratings) are scoreable; the
+  # caller guards them with the pairwise 2-sigma dependence gate.
+  if (length(col_list) < 3) {
     return(list(score = 0, max = 100, pct = 0, breakdown = list()))
   }
   mat <- as.matrix(data[, col_list, drop = FALSE])
@@ -296,7 +132,7 @@
     return(list(score = 0, max = 100, pct = 0, breakdown = list()))
   }
 
-  s1 <- if (k >= 5) 20L else 0L
+  s1 <- if (k >= 5) 20L else if (k >= 3) 10L else 0L
   bd[[1]] <- list(name = "Item count", score = s1, max = 20, detail = sprintf("%d items", k))
 
   ranges <- apply(mat, 2, function(x) length(unique(x)))

@@ -31,8 +31,14 @@ make_namebonus_twins <- function(seed = 7L) {
   male  <- stats::rbinom(n, 1, 0.5)                    # demographic binary (first)
   pre   <- stats::rnorm(n, 10, 2)
   post  <- pre + stats::rnorm(n, 1, 1)                 # paired with pre
-  death <- stats::rbinom(n, 1, 0.35)                   # intended binary outcome
-  named <- data.frame(treatment_arm = treat, male = male, pre = pre,
+  # a GENUINE binary outcome: a collider with TWO independent binary causes. Pre-0.3.0
+  # death was pure noise (the test passed on a chance crossing); a SINGLE binary cause
+  # is direction-symmetric (the 2x2 G^2 is the same both ways), so the pick was a
+  # fingerprint coin flip. Two causes make death's evidence sum dominate either
+  # cause's, and binary causes keep the pair out of the coupled_pair channel.
+  smoker <- stats::rbinom(n, 1, 0.4)
+  death <- stats::rbinom(n, 1, stats::plogis(-2 + 1.4 * male + 1.4 * smoker))
+  named <- data.frame(treatment_arm = treat, male = male, smoker = smoker, pre = pre,
                       post = post, death = death, check.names = FALSE)
   col_n <- named
   names(col_n) <- paste0("col_", seq_along(col_n))

@@ -14,14 +14,37 @@
 #
 # Returns data.frame(column, user_type) with user_type in
 # {Binary, ID, Categorical, Continuous, Other}.
+# Accepted character date formats (value-only; TR day-first included).
+.DATE_FORMATS <- c("%Y-%m-%d", "%Y/%m/%d", "%d.%m.%Y")
+
+# All-values-parse date check for character columns: conservative (every non-NA
+# value must parse), so a stray numeric or free-text column never types Datetime.
+.parses_as_date <- function(xv) {
+  if (length(xv) < 10L) return(FALSE)
+  dt <- tryCatch(suppressWarnings(as.Date(xv, tryFormats = .DATE_FORMATS)),
+                 error = function(e) NULL)
+  !is.null(dt) && !anyNA(dt)
+}
+
 .build_var_info <- function(d) {
   data.frame(
     column = names(d),
     user_type = vapply(seq_along(d), function(i) {
       x <- d[[i]]
+      # 0.3.0: calendar columns. The CLASS and the value FORMAT are part of the
+      # value, not the name, so this preserves name-blindness.
+      if (inherits(x, c("Date", "POSIXct", "POSIXlt"))) return("Datetime")
+      # 0.3.0: a logical column is a two-valued event/indicator coding (TRUE/FALSE),
+      # not "Other". Typing it Other excluded every logical event column from the
+      # survival and outcome candidate sets (pure bug, found by probe E).
+      if (is.logical(x)) {
+        uv <- length(unique(x[!is.na(x)]))
+        return(if (uv == 2L) "Binary" else "Other")
+      }
       if (is.character(x) || is.factor(x)) {
         n <- length(x)
-        xv <- x[!is.na(x)]
+        xv <- as.character(x[!is.na(x)])
+        if (.parses_as_date(xv)) return("Datetime")
         uv <- length(unique(xv))
         if (uv == 2L) return("Binary")
         if (n >= 10L && uv == n) return("ID")

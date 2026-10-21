@@ -126,8 +126,10 @@
   acc <- 0
   for (i in seq_len(n)) {
     eps <- sort.int(Dj[i, ], partial = k + 1L)[k + 1L] # k-th NN distance (self at 0 is index 1)
-    nx <- sum(Dx[i, ] < eps) - 1L                      # marginal neighbours strictly within eps (excl self)
-    ny <- sum(Dy[i, ] < eps) - 1L
+    # 0.3.0: with tied values eps can be 0, giving a count of -1 (self excluded from an
+    # empty set) and digamma(0) = NaN, which made .dep() return NaN. Clamp at 0.
+    nx <- max(0L, sum(Dx[i, ] < eps) - 1L)             # marginal neighbours strictly within eps (excl self)
+    ny <- max(0L, sum(Dy[i, ] < eps) - 1L)
     acc <- acc + digamma(nx + 1) + digamma(ny + 1)
   }
   max(0, digamma(k) + digamma(n) - acc / n)            # KSG algorithm 1

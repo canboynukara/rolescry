@@ -4,7 +4,12 @@
 \alias{rolescry_default_name_bonus}
 \title{Default name-bonus keyword dictionary}
 \usage{
-rolescry_default_name_bonus()
+rolescry_default_name_bonus(domain = c("clinical", "finance", "all"))
+}
+\arguments{
+\item{domain}{Keyword domain: \code{"clinical"} (default), \code{"finance"},
+or \code{"all"} (the union). The dictionaries differ only in vocabulary;
+the capped tie-break mechanics are identical.}
 }
 \value{
 A named list of character vectors (regex fragments), with keys

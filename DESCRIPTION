@@ -1,6 +1,6 @@
 Package: rolescry
 Title: Name-Blind Variable-Role Detection by Data Signature
-Version: 0.2.0
+Version: 0.3.0
 Authors@R: c(
     person("Can", "Boynukara", role = c("aut", "cre", "cph"),
            email = "canboynukara1@gmail.com",
@@ -8,9 +8,11 @@ Authors@R: c(
     person(c("M.", "Yasir"), "Ceyhan", role = "ctb",
            comment = c(ORCID = "0009-0008-0985-9838")))
 Description: Deterministic, name-blind detection of variable roles (group,
-    outcome, survival time and event, paired and agreement measurements,
-    repeated measures, scale items, subject identifier, covariate) in tabular
-    data. Roles are assigned from each column's information-theoretic signature
+    outcome, survival or duration time and event, coupled binary-continuous
+    pairs, calendar time index, paired and agreement measurements, repeated
+    measures and panels, scale and rating items, subject or entity identifier,
+    covariate) in tabular data from any domain -- clinical, financial, social,
+    experimental. Roles are assigned from each column's information-theoretic signature
     -- Shannon entropy, normalized mutual information, and distributional shape
     -- rather than from column names, so renaming columns to 'col_1', 'col_2',
     ... does not change the result ("Data inspice, non nomen"). An optional,
@@ -31,7 +33,7 @@ URL: https://github.com/canboynukara/rolescry
 BugReports: https://github.com/canboynukara/rolescry/issues
 Language: en-US
 NeedsCompilation: no
-Author: Can Boynukara [aut, cre, cph] (ORCID:
-    <https://orcid.org/0000-0002-6075-3923>),
-  M. Yasir Ceyhan [ctb] (ORCID: <https://orcid.org/0009-0008-0985-9838>)
+Packaged: 2026-10-21 09:15:19 UTC; root
+Author: Can Boynukara [aut, cre, cph] (<https://orcid.org/0000-0002-6075-3923>),
+  M. Yasir Ceyhan [ctb] (<https://orcid.org/0009-0008-0985-9838>)
 Maintainer: Can Boynukara <canboynukara1@gmail.com>

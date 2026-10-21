@@ -8,67 +8,64 @@
 # candidate-selecting detectors (group, outcome, subject id, survival); with
 # name_bonus = NULL it is a no-op (purely mathematical). No exports.
 #
-# v0.2.0 state (the port is PARTLY superseded, so read the two layers apart):
-#   * REBUILT on the information-theoretic footing -- .detect_pairs_generic
-#     (paired + agreement) now accepts on the derived MDL criterion
-#     .mdl_pair_bits + the structural agreement condition, with a .dep
-#     (distance-correlation) fallback for non-Gaussian margins; .detect_outcome
-#     is a full rewrite on .mdl_forward_gauss / .mdl_set_independent / .dcor_t
-#     with .anm_direction for orientation. Neither uses the ported pct >= 30
-#     accept any more.
-#   * STILL THE PORTED points-based scorers, with the v0.1.0 pct >= 30 accept
-#     preserved verbatim -- .detect_group_var, .detect_survival_components,
-#     .detect_repeated_measures, .detect_scale_items, and the
-#     run_all_detections fallback. These call into signatures.R, which is
-#     itself unchanged v0.1.0 logic.
+# State at v0.3.0 (pass 5) -- two layers, read apart:
+#   * DERIVED deciders (no point scores in the decision): .detect_group_var (normalized
+#     entropy), .detect_pairs_generic (paired vs agreement by the MDL shift sign
+#     .mdl_shift_bits, pair evidence .mdl_pair_bits + dCor fallback), ordinal scale_items
+#     (.mdl_factor_bits one-factor code), .detect_outcome (.mdl_forward_gauss / Bernoulli
+#     MDL / .dcor_t, .anm_direction orientation), the long-format panel path, coupled_pair.
+#   * PORTED point scorers that REMAIN (signatures.R, v0.1.0 logic, pct >= 30 accept):
+#     .detect_survival_components (signature gate), wide .detect_repeated_measures, and the
+#     binary (IRT) scale path. They remain because their derived replacements were measured
+#     and rejected under the no-regression rule (see the v0.3.0 development report, rolescry_v030/v030_dev_report.md, not distributed with the package).
 # Origin: see "Relationship to MDStatR" in README.md
 
+# Normalized Shannon entropy (bits) of a categorical column: B = H / log2(k), B = 1 iff
+# perfectly balanced. Value-only; NA dropped. NULL when k < 2 or any level seen < 3 times.
+.group_balance <- function(x) {
+  cnt <- as.integer(table(x[!is.na(x)]))
+  cnt <- cnt[cnt > 0L]
+  k <- length(cnt)
+  if (k < 2L || any(cnt < 3L)) return(NULL)
+  p <- cnt / sum(cnt)
+  list(B = round(min(1, -sum(p * log2(p)) / log2(k)), 12), k = k)   # round: float-noise guard for exact rank ties, not a tuned constant
+}
+
 .detect_group_var <- function(data, var_info, name_bonus = NULL) {
-  # D-A (council ruling, Tier-3 boundary): group_var conceptually SPLITS into (i) a DESIGNED,
-  # balanced-exogenous RCT arm -- balanced vs EVERY baseline covariate (group _|_ covariates,
-  # the do-operator's severed incoming edge) AND directed-upstream of the outcome (group _|/_
-  # outcome) -- identifiable only in construction-true RCT data; vs (ii) an OBSERVATIONAL /
-  # numeric-coded treatment, which is estimand-relative (confounded with covariates) and is
-  # EXCLUDED from accuracy, routed to honest SILENCE exactly like `confounder` -- never a
-  # fabricated pick. Detector (i) is GATED behind a generator-D RCT-arm extension and is NOT
-  # enabled here until that construction-true signal exists and fires ONLY on the RCT arm
-  # (zero firing on a balanced-observational arm -- else it would breach the Gödel/Hume
-  # firewall). Until then group_var stays char/factor-only (the twice-reverted numeric wall).
-  # C3 finding (REVERTED): extending candidates to low-cardinality NUMERIC columns to
-  # catch numeric-coded treatment arms regressed sim group_var 0.672 -> 0.422 (precision
-  # 0.33) with NO real gain -- numeric low-card columns (scale items, balanced binary
-  # outcomes/events) flood in as false positives, and a conditioning/source guard cannot
-  # separate them (they all condition something). Name-blind, a numeric-coded treatment
-  # is not distinguishable from a low-card outcome/ordinal/scale-item without external
-  # design information -- a Tier-3 identifiability limit. Kept char/factor-only.
+  # Rule (pass 5): group_var = the char/factor Categorical/Binary column with the highest
+  # normalized entropy B (+ capped name bonus); ties -> fewer levels -> value fingerprint;
+  # value-identical top two -> silence (as .canonical_pick). Candidates stay char/factor-only:
+  # a numeric-coded treatment is indistinguishable name-blind from a low-card covariate/
+  # outcome (Lemma-2 wall). Measured-and-rejected alternatives: see the v0.3.0 development report (rolescry_v030/v030_dev_report.md, not distributed with the package).
   candidates <- var_info$column[var_info$user_type %in% c("Categorical", "Binary")]
-  cols <- character(0); ranks <- numeric(0); gss <- list()
+  cols <- character(0); ranks <- numeric(0); gbs <- list()
   for (col in candidates) {
-    gs <- .score_group_signature(data[[col]])
-    if (gs$pct >= 30) {                                  # LEGIT-threshold preserved
-      cols <- c(cols, col)
-      ranks <- c(ranks, gs$pct + .name_bonus_pts(col, name_bonus$group_var))
-      gss[[length(gss) + 1]] <- gs
-    }
+    x <- data[[col]]
+    if (!is.character(x) && !is.factor(x)) next
+    gb <- .group_balance(x)
+    if (is.null(gb)) next
+    cols <- c(cols, col)
+    ranks <- c(ranks, 100 * gb$B + .name_bonus_pts(col, name_bonus$group_var))
+    gbs[[length(gbs) + 1]] <- gb
   }
-  # D3 disciplined re-attempt (REVERTED): the SOURCE-vs-SINK directional asymmetry --
-  # admit a low-card NUMERIC column iff it is exogenous (NOT MDL-compressed by the others,
-  # so not an outcome SINK) AND high fan-out (.dep-conditions >= 2 columns) -- was built
-  # and MEASURED. It regressed sim group_var 0.6718 -> 0.6255 (precision 0.567) AND real
-  # 0.0667 -> 0.0000 (dangerous-class). Mechanism: the asymmetry separates a group from an
-  # OUTCOME (a sink) but NOT from a numeric COVARIATE (both are exogenous high-fan-out
-  # SOURCES), so used covariates flood as false positives. Reverted per the firewall; this
-  # CONFIRMS (a 2nd time, after the C-line) the name-blind group/covariate identifiability
-  # wall: a numeric-coded treatment is indistinguishable from a low-card covariate without
-  # external design info (Tier-3-adjacent). group_var stays char/factor-only.
-  pick <- if (length(cols) > 0) .canonical_pick(cols, ranks, data) else NA_character_
-  if (!is.na(pick)) {                                    # NA = unbreakable tie -> silence (C1)
-    gs <- gss[[match(pick, cols)]]
+  pick <- NA_character_
+  if (length(cols) > 0) {
+    ks  <- vapply(gbs, function(g) g$k, integer(1L))
+    fps <- unname(vapply(cols, function(k) .col_fingerprint(data[[k]]), character(1L)))
+    ord <- order(-ranks, ks, fps)
+    i1 <- ord[1]; i2 <- ord[2]
+    tie <- length(ord) >= 2L && ranks[i1] == ranks[i2] && ks[i1] == ks[i2] && fps[i1] == fps[i2]
+    if (!tie) pick <- cols[i1]                           # NA = unbreakable tie -> silence (C1)
+  }
+  if (!is.na(pick)) {
+    gb <- gbs[[match(pick, cols)]]
+    pct <- round(100 * gb$B, 1)
     return(list(
       found = TRUE, role = "group_var", column = pick,
       detected_by = if (is.null(name_bonus$group_var)) "mathematical" else "mathematical+name",
-      score = gs$score, max_score = gs$max, pct = gs$pct, breakdown = gs$breakdown,
-      details = gs$details
+      score = pct, max_score = 100, pct = pct,
+      breakdown = list(list(name = "normalized entropy", score = gb$B, max = 1,
+                            detail = sprintf("%d levels, H/log2k=%.3f", gb$k, gb$B)))
     ))
   }
   list(
@@ -77,11 +74,26 @@
   )
 }
 
-.detect_pairs_generic <- function(data, var_info, scorer, role) {
+# Shared admission rule of the pair detectors (also used by verify_roles): the
+# consensus+difference MDL closed form, with the dCor fallback for non-Gaussian margins.
+.pair_admitted <- function(a, b) {
+  mb <- .mdl_pair_bits(a, b)
+  cf <- isTRUE(mb$bits > 0 && mb$agree)
+  accept <- cf
+  route <- if (cf) "closed-form" else "none"
+  if (!cf && !(.gauss_margin(a) && .gauss_margin(b))) {
+    m_eff <- sum(is.finite(a) & is.finite(b))
+    accept <- isTRUE(mb$agree) && .dep(a, b) > 2 / sqrt(max(m_eff, 1))
+    if (accept) route <- "dcor-fallback"
+  }
+  list(admitted = accept, bits = mb$bits, agree = mb$agree, route = route)
+}
+
+.detect_pairs_generic <- function(data, var_info, role) {
   num_cols <- var_info$column[var_info$user_type == "Continuous"]
   if (length(num_cols) < 2) {
     return(list(found = FALSE, role = role, column = NULL, detected_by = "mathematical",
-                score = 0, max_score = 110, pct = 0, breakdown = list()))
+                score = 0, max_score = NA, pct = 0, breakdown = list()))
   }
   pairs <- list()
   for (i in seq_along(num_cols)[-length(num_cols)]) {
@@ -92,9 +104,8 @@
       # information) AND the STRUCTURAL agreement condition var(a-b) < var((a+b)/2)
       # ("agree more than they differ"). This REPLACES the pct>=30 accept, the
       # paired/agreement r-windows, and the dCor 0.30 gate with no tuned constant. The
-      # .mdl_pair_bits test is O(n), so it runs on all pairs cheaply; the scorer (kept
-      # only for a descriptive, NON-deciding breakdown) is computed on survivors.
-      mb <- .mdl_pair_bits(a, b)
+      # .mdl_pair_bits test is O(n), so it runs on all pairs cheaply; no point scorer
+      # is involved in the pair decision.
       # D1 Gaussian-reduction guard. The pair bits = (n/2)log2(va*vb/(vm*vd)) equal
       # n*MI(a,b) EXACTLY only for a Gaussian-admissible pair (the measurement-pair
       # model: two noisy readings of one latent -> bivariate Gaussian). The closed-form
@@ -108,15 +119,12 @@
       # the frozen behaviour (a NO-OP on the linear-Gaussian sim); the fallback only
       # appends off-Gaussian catches (mb$bits<=0, ranked last). The STRUCTURAL pair
       # condition var(d) < var(m) (mb$agree) gates both routes.
-      cf <- isTRUE(mb$bits > 0 && mb$agree)
-      accept <- cf
-      if (!cf && !(.gauss_margin(a) && .gauss_margin(b))) {
-        m_eff <- sum(is.finite(a) & is.finite(b))
-        accept <- isTRUE(mb$agree) && .dep(a, b) > 2 / sqrt(max(m_eff, 1))
-      }
+      pa <- .pair_admitted(a, b)
+      mb <- list(bits = pa$bits)
+      accept <- pa$admitted
       if (accept) {
         pairs[[length(pairs) + 1]] <- list(col1 = num_cols[i], col2 = num_cols[j],
-                                           score = scorer(a, b), bits = mb$bits)
+                                           bits = mb$bits)
       }
     }
   }
@@ -130,24 +138,85 @@
     tie <- length(ord) >= 2L && isTRUE(bts[ord[1]] == bts[ord[2]]) && isTRUE(fps[ord[1]] == fps[ord[2]])
     if (!tie) {                                            # NA-silence on value-identical pair tie
       top <- pairs[[ord[1]]]
+      bits <- top$bits
+      # the single best pair is classified ONCE: systematic shift => paired, else agreement
+      shift <- .mdl_shift_bits(data[[top$col1]], data[[top$col2]])
+      if ((role == "paired_pairs") != (shift > 0)) {
+        return(list(found = FALSE, role = role, column = NULL, detected_by = "mathematical",
+                    score = 0, max_score = NA, pct = 0, breakdown = list(),
+                    reason = sprintf("pair reported under %s",
+                                     if (role == "paired_pairs") "agreement_pairs" else "paired_pairs")))
+      }
       return(list(
         found = TRUE, role = role,
         column = list(list(col1 = top$col1, col2 = top$col2)),
         all_pairs = pairs[ord], detected_by = "mathematical",
-        score = top$score$score, max_score = top$score$max, pct = top$score$pct,
-        breakdown = top$score$breakdown
+        score = bits, max_score = NA, pct = max(0, round(100 * (1 - 2^(-bits / 8)))),  # display map, not a decision
+        breakdown = list(list(name = "consensus/difference MDL", score = bits, max = NA,
+                              detail = sprintf("pair bits=%.1f, shift bits=%.1f", bits, shift)))
       ))
     }
   }
   list(found = FALSE, role = role, column = NULL, detected_by = "mathematical",
-       score = 0, max_score = 110, pct = 0, breakdown = list())
+       score = 0, max_score = NA, pct = 0, breakdown = list())
 }
 
 .detect_paired_pairs <- function(data, var_info) {
-  .detect_pairs_generic(data, var_info, .score_paired_signature, "paired_pairs")
+  .detect_pairs_generic(data, var_info, "paired_pairs")
 }
 .detect_agreement_pairs <- function(data, var_info) {
-  .detect_pairs_generic(data, var_info, .score_agreement_signature, "agreement_pairs")
+  .detect_pairs_generic(data, var_info, "agreement_pairs")
+}
+
+# 0.3.0: conditional identification of the SURVIVAL reading of a dependent
+# (binary, positive-continuous) pair. The identifiable object from P alone is the
+# PAIR; whether it is (time, event) or (cause, binary outcome) is design-relative
+# (same ceiling class as Lemma 2). Censoring geometry singles out the survival
+# reading when ALL of: (i) the continuous member is anchored at zero (mean - 2*sd
+# <= 0, the 2-sigma universal -- a duration is ratio-scale with 0 in reach, an
+# interval-scale measurement is not); (ii) events sit strictly earlier than
+# censorings (median); (iii) the top time-tertile's event rate is strictly below
+# the bottom's -- under censoring the longest observed times are mostly censored.
+# All tests are value-only => RELABEL/S_n invariant. Documented ceiling: a
+# zero-anchored continuous CAUSE whose larger values are protective mimics this
+# geometry and still reads as survival.
+.censoring_decisive <- function(tv, ev) {
+  cc <- is.finite(tv) & !is.na(ev)
+  tv <- tv[cc]; ev <- ev[cc]
+  if (length(tv) < 20L || length(unique(ev)) != 2L) return(FALSE)   # n<20 estimator floor
+  if (!any(ev == 0) || !any(ev == 1)) return(FALSE)                 # no censoring observed -> geometry undefined
+  sdv <- stats::sd(tv)
+  if (!is.finite(sdv) || sdv <= 0) return(FALSE)
+  # (i) zero-anchored scale: a duration is a ratio-scale quantity anchored at 0,
+  # so 0 lies inside its 2-sigma envelope (mean - 2*sd <= 0). An interval-scale
+  # measurement far from zero (blood pressure, albumin) fails this. Reuses the
+  # package's 2-sigma universal; no new constant.
+  if (mean(tv) - 2 * sdv > 0) return(FALSE)
+  # (ii) events sit strictly earlier than censorings
+  if (!(stats::median(tv[ev == 1]) < stats::median(tv[ev == 0]))) return(FALSE)
+  # (iii) the top time-tertile's event rate is strictly below the bottom's:
+  # under censoring, the longest observed times are mostly censored. Only the
+  # ENDS are compared -- the middle tertile follows the hazard shape and is not
+  # constrained by censoring.
+  q <- stats::quantile(tv, c(1/3, 2/3), names = FALSE, type = 1)    # order statistics: value-only
+  g <- findInterval(tv, q)
+  r <- vapply(c(0, 2), function(k) if (any(g == k)) mean(ev[g == k]) else NA_real_, numeric(1))
+  if (anyNA(r)) return(FALSE)
+  r[1] > r[2]
+}
+
+# Survival association gate shared by the survival detector and verify_roles: event
+# compresses time under a 1-predictor Gaussian MDL model (monotone) OR the bias-corrected
+# dCor independence T-test rejects (non-monotone); evaluated on complete cases.
+.survival_assoc <- function(tv, ev01, min_n = 10L) {
+  cc <- !is.na(tv) & !is.na(ev01)
+  if (sum(cc) <= min_n) return(list(admitted = FALSE, bits = NA_real_, t = 0, monotone = FALSE, nonmono = FALSE))
+  tvc <- tv[cc]; evc <- ev01[cc]
+  bits <- .mdl_forward_gauss(tvc, matrix(evc, ncol = 1), fp = .col_fingerprint(evc))$bits_saved
+  monotone <- is.finite(bits) && bits > 0
+  tt <- .dcor_t(evc, tvc)
+  nonmono <- tt > 2
+  list(admitted = monotone || nonmono, bits = bits, t = tt, monotone = monotone, nonmono = nonmono)
 }
 
 .detect_survival_components <- function(data, var_info, component, name_bonus = NULL) {
@@ -160,14 +229,22 @@
     length(v) > 0 && all(abs(v - round(v)) < 1e-9) && length(unique(v)) == 3L
   }, logical(1L))]
   event_cands <- unique(c(binary_cols, int_status))
-  evs <- character(0); tms <- character(0); ranks <- numeric(0); sss <- list()
+  # 0.3.0: an all-distinct positive integer column value-types as ID, but a follow-up
+  # time recorded in whole days has exactly that signature (ovarian futime). Admit
+  # numeric ID-typed columns as TIME candidates; the event-association gate below
+  # decides, so a true identifier (independent of every event) is not admitted.
+  id_time <- var_info$column[var_info$user_type == "ID" &
+                vapply(var_info$column, function(c) is.numeric(data[[c]]), logical(1L))]
+  time_cands <- c(numeric_cols, id_time)
+  evs <- character(0); tms <- character(0); ranks <- numeric(0); sss <- list(); nbs <- numeric(0)
+  acs <- numeric(0); nns <- integer(0)                 # |cor| + n per admitted pair (dominance gate)
   for (ev in event_cands) {
     ev01 <- .normalize_event(data[[ev]])                 # C3: {1,2}/factor/logical/{0,1,2} -> {0,1}
     if (is.null(ev01)) next
     obs <- !is.na(ev01)                                  # C2: available-case, no hard NA skip
     if (sum(obs) < 10) next                              # n<10 LEGIT-threshold preserved
     if (length(unique(ev01[obs])) != 2L) next
-    for (tm in numeric_cols) {
+    for (tm in time_cands) {
       if (tm == ev) next
       tm_vals <- suppressWarnings(as.numeric(data[[tm]]))
       if (any(tm_vals <= 0, na.rm = TRUE)) next
@@ -179,33 +256,54 @@
         # that association so e.g. status+time beats sex+meal.cal. Value-based =>
         # equivariant.
         cc <- obs & !is.na(tm_vals)
-        # Survival association: the linear-MDL break-even floor (event compresses time
-        # under a 1-predictor Gaussian model) + |cor| ranking weight. C1 tried a
-        # variance-aware 2-group MDL to also catch NON-monotone hazard, but its total
-        # bits scale with n, so on large-n monotone REAL survival it over-admitted
-        # non-survival binary-vs-continuous variance-splits and regressed event_variable
-        # (0.75 -> 0.44). D3 resolves this WITHOUT that regression: the linear MDL still
-        # catches MONOTONE association, and a NON-MONOTONE hazard (events cluster at mid-
-        # time: linear assoc ~0 but real dependence) is caught by the bias-corrected dCor
-        # independence T-test (.dcor_t > 2, the 2-sigma universal). That test is n-INVARIANT
-        # as a decision (a t-threshold, not total bits) and its U-centered statistic is ~0
-        # under independence, so non-survival pairs do NOT flood as n grows -- and it only
-        # fires AFTER the survival signature ss$pct>=30 gate above. Accept on EITHER route.
+        # Survival association, two routes: the linear-MDL break-even floor (event compresses
+        # time under a 1-predictor Gaussian model) catches MONOTONE association; the
+        # bias-corrected dCor independence T-test (.dcor_t > 2, the 2-sigma universal; n-invariant,
+        # ~0 under independence) catches NON-MONOTONE hazard. Accept on EITHER route, only after the
+        # survival signature ss$pct>=30 gate above. Measured-and-rejected alternatives: see the v0.3.0 development report (rolescry_v030/v030_dev_report.md, not distributed with the package).
         if (sum(cc) <= 10) next
         tmc <- tm_vals[cc]; evc <- ev01[cc]
-        assoc_bits <- .mdl_forward_gauss(tmc, matrix(evc, ncol = 1),
-                                         fp = .col_fingerprint(evc))$bits_saved
-        monotone <- is.finite(assoc_bits) && assoc_bits > 0
-        nonmono  <- .dcor_t(evc, tmc) > 2                      # bias-corrected dCor independence reject
-        if (!monotone && !nonmono) next                       # event independent of time -> not survival
+        sa <- .survival_assoc(tm_vals, ev01)
+        monotone <- sa$monotone; nonmono <- sa$nonmono
+        if (!sa$admitted) next                                # event independent of time -> not survival
+        # An ID-typed time candidate overturns a structural typing, so it must pass BOTH
+        # evidence routes (monotone MDL AND dCor independence reject), not either one;
+        # a random identifier passes one route by chance far more often than both.
+        if (tm %in% id_time && !(monotone && nonmono)) next
         assoc <- abs(suppressWarnings(stats::cor(tmc, evc)))   # bounded ranking weight only
         if (is.na(assoc)) assoc <- 0
         evs <- c(evs, ev); tms <- c(tms, tm)
-        ranks <- c(ranks, ss$score + 60 * assoc +
-                     .name_bonus_pts(tm, name_bonus$time_variable) +
-                     .name_bonus_pts(ev, name_bonus$event_variable))
+        acs <- c(acs, assoc); nns <- c(nns, sum(cc))
+        nbs <- c(nbs, .name_bonus_pts(tm, name_bonus$time_variable) +
+                        .name_bonus_pts(ev, name_bonus$event_variable))
+        ranks <- c(ranks, ss$score + 60 * assoc + nbs[length(nbs)])
         sss[[length(sss) + 1]] <- ss
       }
+    }
+  }
+  if (length(evs) > 1L) {
+    # 0.3.0: re-evaluate every admitted pair on ONE common row set (rows complete in all
+    # admitted candidate columns). Each pair is first judged on its own available cases,
+    # so pairs whose columns are missing in different rows were compared on different
+    # subsamples and one could win on noise (lung: sex/meal.cal over status/time).
+    # Gates and ranking are unchanged; only the rows they are computed on are common.
+    common <- stats::complete.cases(data[, unique(c(evs, tms)), drop = FALSE])
+    if (sum(common) >= 10L && sum(!common) > 0L) {
+      dc <- data[common, , drop = FALSE]; keep <- logical(length(evs))
+      for (k in seq_along(evs)) {
+        e <- .normalize_event(dc[[evs[k]]]); t <- suppressWarnings(as.numeric(dc[[tms[k]]]))
+        ss <- .score_survival_signature(tms[k], evs[k], dc)
+        if (is.null(e) || length(unique(e)) != 2L || ss$pct < 30) next
+        sa <- .survival_assoc(t, e, min_n = 9L)            # common block has no n<=10 skip (>= 10 rows)
+        mono <- sa$monotone; nonm <- sa$nonmono
+        if (!sa$admitted) next
+        if (tms[k] %in% id_time && !(mono && nonm)) next
+        a <- abs(suppressWarnings(stats::cor(t, e))); if (is.na(a)) a <- 0
+        ranks[k] <- ss$score + 60 * a + nbs[k]; sss[[k]] <- ss; keep[k] <- TRUE
+        acs[k] <- a; nns[k] <- sum(is.finite(t) & !is.na(e))
+      }
+      evs <- evs[keep]; tms <- tms[keep]; ranks <- ranks[keep]; sss <- sss[keep]; nbs <- nbs[keep]
+      acs <- acs[keep]; nns <- nns[keep]
     }
   }
   if (length(evs) > 0) {
@@ -223,17 +321,73 @@
       w <- ord[1]
       best_event <- evs[w]; best_time <- tms[w]; best_ss <- sss[[w]]
       ss <- best_ss
-      col <- if (component == "time") best_time else best_event
-      return(list(
-        found = TRUE, role = paste0(component, "_variable"), column = col,
-        detected_by = "mathematical", score = ss$score, max_score = ss$max,
-        pct = ss$pct, breakdown = ss$breakdown,
-        event_col = best_event, time_col = best_time
-      ))
+      # 0.3.0: assign the survival roles only when censoring geometry singles the
+      # survival reading out; otherwise the honest output is the PAIR itself
+      # (component "pair" -> the coupled_pair role), with the interpretation left
+      # to the user. See .censoring_decisive.
+      decisive <- .censoring_decisive(suppressWarnings(as.numeric(data[[best_time]])),
+                                      .normalize_event(data[[best_event]]))
+      # 0.3.0 dominance gate: Lemma 2 makes a SINGLE decisive pair's geometry
+      # non-discriminating between readings, but when SEVERAL pairs pass the
+      # decisive test the data offers competing survival readings. The winner is
+      # assigned the survival roles only when its event-time association DOMINATES
+      # every decisive competitor at the 2-sigma universal (Fisher z two-correlation
+      # comparison, the same device as the panel-axis gate); otherwise the honest
+      # output is the pair itself with the competition named.
+      rival <- NA_character_
+      if (decisive && length(evs) > 1L) {
+        others <- setdiff(seq_along(evs), w)
+        # Only DISJOINT-time rivals compete as READINGS: a rival sharing the winner's
+        # time column agrees the table is survival-shaped on that axis and merely
+        # offers another event candidate -- a ranking question the association weight
+        # and the common-row re-evaluation already answer (pbc: time/hepato must not
+        # veto time/status). A rival on a DIFFERENT time axis disputes which column
+        # is the duration at all -- that is the real underdetermination.
+        others <- others[tms[others] != tms[w]]
+        # An ID-typed time candidate enters on an exceptional evidence bar (both
+        # routes) because its prior reading is "identifier"; it may WIN on that
+        # evidence but may not VETO a structurally-typed reading (pbc: a sequential
+        # registry id correlates with administrative censoring and mimics survival).
+        if (!(tms[w] %in% id_time)) others <- others[!(tms[others] %in% id_time)]
+        odec <- others[vapply(others, function(k) .censoring_decisive(
+          suppressWarnings(as.numeric(data[[tms[k]]])), .normalize_event(data[[evs[k]]])), logical(1L))]
+        if (length(odec)) {
+          cpt <- odec[which.max(ranks[odec])]
+          zw <- atanh(min(acs[w], 1 - 1e-12)); zc <- atanh(min(acs[cpt], 1 - 1e-12))
+          dominant <- nns[w] > 3L && nns[cpt] > 3L &&
+            (zw - zc) / sqrt(1 / (nns[w] - 3) + 1 / (nns[cpt] - 3)) > 2
+          if (!dominant) { decisive <- FALSE; rival <- paste(tms[cpt], evs[cpt], sep = "/") }
+        }
+      }
+      if (component == "pair") {
+        if (!decisive) return(list(
+          found = TRUE, role = "coupled_pair",
+          column = c(best_time, best_event),
+          continuous_col = best_time, binary_col = best_event,
+          interpretations = c(
+            "survival: time = continuous member, event = binary member",
+            "causal: cause = continuous member, binary outcome = binary member"),
+          detected_by = "mathematical", score = ss$score, max_score = ss$max,
+          pct = ss$pct, breakdown = ss$breakdown,
+          reason = if (is.na(rival))
+            "dependent binary/positive-continuous pair; censoring geometry not decisive, so the survival-vs-outcome reading is design-relative"
+          else sprintf("several admissible survival readings without a 2-sigma dominance margin (competing pair: %s); the reading is left to the user", rival)
+        ))
+      } else if (decisive) {
+        col <- if (component == "time") best_time else best_event
+        return(list(
+          found = TRUE, role = paste0(component, "_variable"), column = col,
+          detected_by = "mathematical", score = ss$score, max_score = ss$max,
+          pct = ss$pct, breakdown = ss$breakdown,
+          event_col = best_event, time_col = best_time
+        ))
+      }
     }
   }
   list(
-    found = FALSE, role = paste0(component, "_variable"), column = NULL,
+    found = FALSE,
+    role = if (component == "pair") "coupled_pair" else paste0(component, "_variable"),
+    column = NULL,
     detected_by = "mathematical", score = 0, max_score = 100, pct = 0, breakdown = list()
   )
 }
@@ -281,11 +435,13 @@
   }
   if (length(clust) == 0L) return(NULL)
   num_cols <- var_info$column[var_info$user_type == "Continuous"]
+  dt_cols  <- var_info$column[var_info$user_type == "Datetime"]   # 0.3.0: a calendar column is a panel time axis
   panels <- list()
   for (cc in clust) {
     cl <- as.character(data[[cc]])
     cand_num <- setdiff(num_cols, cc)
-    tcols <- cand_num[vapply(cand_num, function(t) mono_inc_within(cl, suppressWarnings(as.numeric(data[[t]]))), logical(1L))]
+    cand_t <- c(cand_num, setdiff(dt_cols, cc))
+    tcols <- cand_t[vapply(cand_t, function(t) mono_inc_within(cl, .datetime_num(data[[t]])), logical(1L))]
     if (length(tcols) == 0L) next
     mcols <- cand_num[vapply(cand_num, function(m) within_var(cl, suppressWarnings(as.numeric(data[[m]]))), logical(1L))]
     mcols <- setdiff(mcols, tcols)
@@ -293,13 +449,79 @@
     panels[[length(panels) + 1L]] <- list(cluster = cc, time = tcols, measures = mcols)
   }
   if (length(panels) == 0L) return(NULL)
-  # canonical pick among cluster candidates: smallest value-fingerprint (order-free)
-  fps <- vapply(panels, function(p) .col_fingerprint(data[[p$cluster]]), character(1L))
-  panels[[order(fps)[1]]]
+  if (length(panels) == 1L) return(panels[[1L]])
+  # 0.3.0: a BALANCED panel is value-symmetric -- (firm, month) and (month, firm)
+  # both satisfy the structural test, so the entity/time reading is not a function
+  # of P alone. Discriminator: along the TRUE time axis the measures are serially
+  # dependent within the entity. Pooled within-cluster lag-1 correlation, tested at
+  # the 2-sigma universal (|r| sqrt(n) / sqrt(1 - r^2) > 2). Supported readings win;
+  # several or none supported and the clusters differ -> AMBIGUOUS, reported as such
+  # (the coupled_pair philosophy: name the symmetry, let the user decide).
+  lag1_stats <- function(p) {
+    cl <- as.character(data[[p$cluster]]); tv <- .datetime_num(data[[p$time[1]]])
+    best <- list(t = 0, z = 0, w = 0)
+    for (m in p$measures) {
+      mv <- suppressWarnings(as.numeric(data[[m]]))
+      # Two-way within transformation (panel fixed effects): subtract cluster and
+      # time-position means. Raw pooling lets between-cluster level variance and
+      # FIXED cross-sectional patterns (the same adjacent-position pairing recurring
+      # in every cluster) masquerade as serial dependence on BOTH axis readings;
+      # after demeaning only genuine serial structure survives.
+      ok <- is.finite(mv) & is.finite(tv) & !is.na(cl)
+      mv[ok] <- mv[ok] - stats::ave(mv[ok], cl[ok]) - stats::ave(mv[ok], tv[ok]) + mean(mv[ok])
+      a <- c(); b <- c()
+      for (lv in unique(cl)) {
+        i <- which(cl == lv & is.finite(tv) & is.finite(mv))
+        if (length(i) < 3L) next
+        i <- i[order(tv[i])]
+        a <- c(a, mv[i][-length(i)]); b <- c(b, mv[i][-1])
+      }
+      if (length(a) >= 8L && stats::sd(a) > 0 && stats::sd(b) > 0) {
+        r <- stats::cor(a, b)
+        if (is.finite(r) && abs(r) < 1) {
+          tt <- abs(r) * sqrt(length(a)) / sqrt(1 - r^2)
+          if (tt > best$t) best <- list(t = tt, z = atanh(abs(r)), w = length(a) - 3L)
+        }
+      }
+    }
+    best
+  }
+  st <- lapply(panels, lag1_stats)
+  ts <- vapply(st, `[[`, numeric(1L), "t")
+  sup <- which(ts > 2)
+  if (length(sup) > 1L) {
+    # Both readings pass the marginal gate. On the FALSE axis the recurring
+    # adjacent-position pairing makes products dependent across clusters, so its
+    # nominal t overstates the evidence; the TRUE axis carries structural serial
+    # correlation bounded away from zero. Fisher z two-correlation comparison at
+    # the same 2-sigma universal: a decisive gap singles the reading out,
+    # otherwise the symmetry is real and stays reported as ambiguous.
+    o <- sup[order(-ts[sup])]
+    z1 <- st[[o[1]]]; z2 <- st[[o[2]]]
+    if (z1$w > 0 && z2$w > 0 &&
+        (z1$z - z2$z) / sqrt(1 / z1$w + 1 / z2$w) > 2) sup <- o[1]
+  }
+  pool <- if (length(sup) >= 1L) panels[sup] else panels
+  fps <- vapply(pool, function(p) .col_fingerprint(data[[p$cluster]]), character(1L))
+  if (length(unique(vapply(pool, `[[`, "", "cluster"))) == 1L || length(sup) == 1L)
+    return(pool[[order(fps)[1]]])
+  list(ambiguous = TRUE, panels = pool[order(fps)])
 }
 
-.detect_subject_id <- function(data, var_info, name_bonus = NULL) {
-  id_cols <- var_info$column[var_info$user_type == "ID"]
+# Identifier-like column: >= 10 observed, unique among observed, <= 20 % missing, and
+# character/factor or integer-valued numeric. Shared by the detector and verify_roles.
+.id_like <- function(x) {
+  nonna <- x[!is.na(x)]                                   # C2: NA-tolerant (was: any NA -> reject)
+  if (length(nonna) < 10L) return(FALSE)
+  if (length(unique(nonna)) != length(nonna)) return(FALSE)
+  if (mean(is.na(x)) > 0.2) return(FALSE)
+  is.character(x) || is.factor(x) || (is.numeric(x) && isTRUE(all(nonna == round(nonna))))
+}
+
+.detect_subject_id <- function(data, var_info, name_bonus = NULL, claimed = character(0)) {
+  # 0.3.0: a column already owned by a survival role (e.g. an all-distinct integer
+  # follow-up time) is not also a subject identifier (atomicity).
+  id_cols <- setdiff(var_info$column[var_info$user_type == "ID"], claimed)
   id_pick <- if (length(id_cols) > 0) .canonical_pick(id_cols, rep(1, length(id_cols)), data) else NA_character_
   if (!is.na(id_pick)) {                                 # NA = unbreakable tie -> fall through
     return(list(
@@ -310,15 +532,8 @@
     ))
   }
   id_like_cols <- character(0)
-  for (col in var_info$column) {
-    vals <- data[[col]]
-    nonna <- vals[!is.na(vals)]                           # C2: NA-tolerant (was: any NA -> reject)
-    if (length(nonna) < 10L) next
-    if (length(unique(nonna)) != length(nonna)) next       # unique among OBSERVED values
-    if (mean(is.na(vals)) > 0.2) next                      # too sparse to be a clean id
-    id_like <- is.character(vals) || is.factor(vals) ||
-      (is.numeric(vals) && isTRUE(all(nonna == round(nonna))))
-    if (id_like) id_like_cols <- c(id_like_cols, col)
+  for (col in setdiff(var_info$column, claimed)) {
+    if (.id_like(data[[col]])) id_like_cols <- c(id_like_cols, col)
   }
   if (length(id_like_cols) > 0) {
     nb_hits <- id_like_cols[vapply(id_like_cols,
@@ -341,6 +556,14 @@
   # monotone time + within-cluster-varying measures, which separates it from a group_var
   # (few levels, no panel structure). Value-only; name routes via name_bonus only.
   panel <- .detect_long_panel(data, var_info)
+  if (!is.null(panel) && isTRUE(panel$ambiguous)) {
+    # 0.3.0: axis-ambiguous balanced panel -> no single entity column is
+    # identifiable; stay silent (the repeated_measures entry carries the readings).
+    return(list(found = FALSE, role = "subject_id", column = NULL,
+                detected_by = "mathematical", score = 0, max_score = 100, pct = 0,
+                breakdown = list(),
+                reason = "balanced panel: entity/time axis value-symmetric; see repeated_measures$panel_axes"))
+  }
   if (!is.null(panel)) {
     return(list(
       found = TRUE, role = "subject_id", column = panel$cluster,
@@ -429,8 +652,8 @@
     # continuous pair (dependency.R:81-89) that would flood FALSE causes through the council's
     # nominal floor. MIN_PRED=1 (binary asymmetric; atomicity already removed the event/scale
     # confounders) preserves recall; T>2 is n-INVARIANT so a weak small-n signal stays honestly
-    # SILENT (Rissanen). No new tuned constant. (D-D's MIN_PRED=2 was overruled by its OWN
-    # revert-bar: it collapses recall to ~0.28-0.33, below both baselines.)
+    # SILENT (Rissanen). No new tuned constant. Measured-and-rejected alternatives: see the v0.3.0 development
+    # report (rolescry_v030/v030_dev_report.md, not distributed with the package).
     if (type == "continuous") {
       ccidx <- which(is.finite(yv) & (rowSums(!is.finite(X)) == 0))   # joint complete cases (design matrix)
       if (length(ccidx) < 10L) next
@@ -445,14 +668,22 @@
       if (res$k >= MIN_PRED && res$bits_saved > 0)
         indep[y] <- .mdl_set_independent(Xc[, res$sel, drop = FALSE], fp[res$sel])
     } else {
-      # PAIRWISE association (NA-robust per predictor; .dcor_t row-caps + filters internally).
-      # Joint complete-cases would drop the candidate whenever ANY predictor is character-
-      # coerced-to-NA, starving recall -- so the binary path reads the FULL columns pairwise.
-      assoc <- vapply(seq_along(preds), function(j) .dcor_t(yv, X[, j]), numeric(1L))
-      paid  <- which(is.finite(assoc) & assoc > 2)              # 2-sigma bias-corrected dCor reject
-      bits[y] <- if (length(paid)) sum(assoc[paid]) else 0       # aggregate association = value-based rank
+      # Bernoulli marginal MDL per predictor (NA-robust pairwise, as before: joint
+      # complete-cases would starve recall when predictors are missing in different
+      # rows). Replaces the bare 2-sigma dCor test, whose m-way scan inflated the
+      # phantom-outcome rate on pure noise to ~1-(1-0.023)^m (~14% at m=4-5) and
+      # whose familywise correction cost more true detections than it removed false
+      # ones. The MDL code is selection-consistent by construction: each admitted
+      # cause must pay its slope's 1/2 log2(n) parameter bits PLUS the log2(m)
+      # model-index bits naming it among the m candidates (.mdl_bern_bits).
+      yb <- data[[y]]; lv <- sort(unique(yb[!is.na(yb)]))
+      y01 <- ifelse(is.na(yb), NA_integer_, as.integer(yb == lv[2L]))
+      bb <- vapply(seq_along(preds), function(j)
+        .mdl_bern_bits(y01, X[, j], length(preds)), numeric(1L))
+      paid  <- which(is.finite(bb) & bb > 0)                    # net-compressing causes
+      bits[y] <- if (length(paid)) sum(bb[paid]) else 0
       ksel[y] <- length(paid)
-      if (length(paid)) toppred[y] <- preds[paid[which.max(assoc[paid])]]
+      if (length(paid)) toppred[y] <- preds[paid[which.max(bb[paid])]]
     }
   }
   qual <- (ksel >= MIN_PRED) & (bits > 0) & indep    # collider: >=2 MDL-selected, net-compressing, mutually-independent causes
@@ -524,6 +755,23 @@
   # axis and cluster id excluded). On cross-sectional (WIDE) data .detect_long_panel
   # returns NULL -> the WIDE search runs unchanged (a NO-OP on the seen corpus).
   panel <- .detect_long_panel(data, var_info)
+  if (!is.null(panel) && isTRUE(panel$ambiguous)) {
+    # 0.3.0: balanced-panel symmetry -- the measures are the same under every
+    # reading, so they ARE reportable; the entity/time axes are not.
+    meas <- Reduce(intersect, lapply(panel$panels, `[[`, "measures"))
+    axes <- lapply(panel$panels, function(p) c(cluster = p$cluster, time = p$time[1]))
+    if (length(meas) >= 1L) {
+      return(list(found = TRUE, role = "repeated_measures", column = meas,
+                  detected_by = "mathematical", score = 70, max_score = 120, pct = 58.3,
+                  panel_axes = axes,
+                  reason = "balanced panel: the entity/time axis reading is value-symmetric and left to the user (see panel_axes)",
+                  breakdown = list(list(name = "Long-format repeated measures (axis-ambiguous panel)",
+                                        score = 70, max = 120,
+                                        detail = sprintf("%d measure(s); %d admissible axis readings",
+                                                         length(meas), length(axes))))))
+    }
+    panel <- NULL
+  }
   if (!is.null(panel)) {
     return(list(found = TRUE, role = "repeated_measures", column = panel$measures,
                 detected_by = "mathematical", score = 70, max_score = 120, pct = 58.3,
@@ -549,6 +797,7 @@
   # linearly correlated by construction, so a linearly-independent column is not a
   # block member. The block is then DEFINED by dCor (>= 0.5). Both measures are
   # symmetric value functions => RELABEL / S_n invariant. Cuts wide-data cost ~20x.
+  # Measured-and-rejected alternatives: see the v0.3.0 development report (rolescry_v030/v030_dev_report.md, not distributed with the package).
   Clin <- suppressWarnings(stats::cor(M, use = "pairwise.complete.obs"))
   Clin[is.na(Clin)] <- 0
   # canonical (value-fingerprint) column order so .score_repeated_signature's
@@ -566,7 +815,34 @@
     members <- fp_order(num_cols[cand])                    # value-defined, order-free
     if (length(members) >= 3L) blocks[[length(blocks) + 1L]] <- members
   }
-  if (length(blocks) > 0) blocks <- blocks[!duplicated(vapply(blocks, paste, character(1L), collapse = ""))]
+  if (length(blocks) > 0) {
+    # 0.3.0 sink veto: a block member MDL-explained by >= 2 MUTUALLY INDEPENDENT
+    # other members is a dependency SINK (collider), not a repeated measurement --
+    # genuine repeated measures share a latent factor, so their "causes" are never
+    # mutually independent. Reuses the outcome machinery; no new constant. Probe D:
+    # y = x1 + x2 + noise was swallowed as {x1, x2, y} and outcome_continuous never
+    # fired. Members are value-fingerprint-ordered, so the sweep is equivariant.
+    drop_sinks <- function(members) {
+      keep <- members
+      for (m in members) {
+        others <- setdiff(keep, m)
+        if (length(others) < 2L) next
+        yv <- M[, m]; Xo <- M[, others, drop = FALSE]
+        cc <- which(is.finite(yv) & rowSums(!is.finite(Xo)) == 0)
+        if (length(cc) < 10L) next
+        if (length(cc) > .MDL_NMAX) cc <- cc[.dcor_idx(length(cc), .MDL_NMAX, seed = 7L)]
+        fpo <- vapply(others, function(c) .col_fingerprint(data[[c]]), character(1L))
+        r <- .mdl_forward_gauss(yv[cc], Xo[cc, , drop = FALSE], fpo)
+        if (r$k >= 2L && r$bits_saved > 0 &&
+            .mdl_set_independent(Xo[cc, r$sel, drop = FALSE], fpo[r$sel]))
+          keep <- setdiff(keep, m)
+      }
+      keep
+    }
+    blocks <- lapply(blocks, drop_sinks)
+    blocks <- blocks[vapply(blocks, length, 0L) >= 3L]
+    blocks <- blocks[!duplicated(vapply(blocks, paste, character(1L), collapse = ""))]
+  }
   bcols <- list(); bscore <- numeric(0); brs <- list()
   for (b in blocks) {
     rs <- .score_repeated_signature(b, data)
@@ -589,23 +865,37 @@
        detected_by = "mathematical", score = 0, max_score = 120, pct = 0, breakdown = list())
 }
 
+# Scale-item column type: "binary" ({0,1} exactly), "ordinal" (integer-valued, >= 3 levels,
+# discrete), else NA. Needs >= 20 observed values.
+.scale_item_type <- function(x) {
+  nz <- x[!is.na(x)]
+  if (length(nz) < 20L || !is.numeric(x)) return(NA_character_)
+  u <- sort(unique(nz), method = "radix")
+  if (length(u) == 2L && isTRUE(all(abs(u - c(0, 1)) < 1e-9))) return("binary")
+  if (all(nz == round(nz)) && length(u) >= 3L && .is_discrete(x)) return("ordinal")
+  NA_character_
+}
+
 .detect_scale_items <- function(data, var_info) {
+  # Ordinal items: the fixed candidate set must win the one-factor MDL code with a common
+  # quantity (independent columns give negative bits). Binary batteries stay on the ported
+  # scorer pending a Bernoulli one-latent code.
+  none <- list(found = FALSE, role = "scale_items", column = NULL,
+               detected_by = "mathematical", score = 0, max_score = NA_real_, pct = 0, breakdown = list())
+  hit <- function(cols, score, nm, detail) list(
+    found = TRUE, role = "scale_items", column = cols, detected_by = "mathematical",
+    score = score, max_score = NA_real_, pct = max(0, round(100 * (1 - 2^(-score / 8)))),
+    breakdown = list(list(name = nm, score = score, max = NA_real_, detail = detail)),
+    n_items = length(cols))
   ord_cols <- var_info$column[var_info$user_type %in% c("Ordinal", "Continuous")]
-  scale_candidates <- c()
-  for (col in ord_cols) {
-    vals <- data[[col]][!is.na(data[[col]])]
-    if (length(vals) < 20) next
-    if (!all(vals == round(vals))) next
-    n_unique <- length(unique(vals))
-    if (n_unique >= 3 && n_unique <= 10) scale_candidates <- c(scale_candidates, col)
-  }
-  if (length(scale_candidates) >= 5) {
-    ss <- .score_scale_items_signature(scale_candidates, data)
-    if (ss$pct >= 30) {
-      return(list(found = TRUE, role = "scale_items", column = scale_candidates,
-                  detected_by = "mathematical", score = ss$score, max_score = ss$max,
-                  pct = ss$pct, breakdown = ss$breakdown, n_items = length(scale_candidates)))
-    }
+  cand <- Filter(function(col) identical(.scale_item_type(data[[col]]), "ordinal"), ord_cols)
+  if (length(cand) >= 3L) {
+    f <- .mdl_factor_bits(as.matrix(data.frame(lapply(data[cand], as.numeric))))
+    # same_quantity (communality > uniqueness) is a same-units / repeated-measures notion; scale items
+    # are different questions sharing a latent, so it is reported but does not decide.
+    if (f$bits > 0)
+      return(hit(cand, f$bits, "one-factor MDL block",
+                 sprintf("%d items; %.1f bits; same_quantity=%s", length(cand), f$bits, f$same_quantity)))
   }
   # D3 ANCESTOR PORT (complementary): a DICHOTOMOUS IRT battery -- >= 8 binary {0,1}
   # columns (value-only; the ordinal path above misses binaries). Only when the ordinal
@@ -613,13 +903,10 @@
   # precision guard with NO tuned threshold: reject a one-hot PARTITION (every respondent
   # endorses exactly one item -> max row-sum <= 1), which is an encoding, not a scale; a
   # real battery has respondents endorsing several items (max row-sum > 1).
-  if (length(scale_candidates) < 5) {
+  {
     bin_cols <- character(0)
     for (col in var_info$column) {
-      v <- data[[col]]; nz <- v[!is.na(v)]
-      if (length(nz) < 20L || !is.numeric(v)) next
-      u <- sort(unique(nz), method = "radix")
-      if (length(u) == 2L && isTRUE(all(abs(u - c(0, 1)) < 1e-9))) bin_cols <- c(bin_cols, col)
+      if (identical(.scale_item_type(data[[col]]), "binary")) bin_cols <- c(bin_cols, col)
     }
     if (length(bin_cols) >= 8L) {
       mb <- as.matrix(data[, bin_cols, drop = FALSE]); mb <- mb[stats::complete.cases(mb), , drop = FALSE]
@@ -633,14 +920,48 @@
       }
     }
   }
-  list(found = FALSE, role = "scale_items", column = NULL,
-       detected_by = "mathematical", score = 0, max_score = 100, pct = 0, breakdown = list())
+  none
 }
 
-.detect_covariates <- function(data, var_info) {
+# 0.3.0: covariate is the RESIDUAL role -- a Continuous/Categorical/Binary column that no
+# other role claimed. In 0.2.0 it listed every such column, including the survival pair,
+# group and outcomes, so it carried no information beyond the column types.
+# 0.3.0: calendar axis (time_index). Every Datetime-typed column is a calendar
+# axis; the breakdown records whether it is monotone in stored order and regularly
+# spaced. Needed for finance and longitudinal data, where the date column was
+# previously typed "Other" and invisible to every detector.
+.detect_time_index <- function(data, var_info) {
+  tcols <- var_info$column[var_info$user_type == "Datetime"]
+  if (length(tcols) == 0L) {
+    return(list(found = FALSE, role = "time_index", column = NULL,
+                detected_by = "mathematical", score = 0, max_score = 100, pct = 0,
+                breakdown = list()))
+  }
+  bd <- lapply(tcols, function(col) {
+    nv <- .datetime_num(data[[col]]); nv <- nv[is.finite(nv)]; dfs <- diff(nv)
+    list(name = col, score = 80, max = 100,
+         detail = sprintf("calendar values; monotone=%s regular_spacing=%s",
+                          length(dfs) > 0 && all(dfs > 0),
+                          length(dfs) > 1 && isTRUE(stats::sd(dfs) == 0)))
+  })
+  list(found = TRUE, role = "time_index", column = tcols,
+       detected_by = "mathematical", score = 80, max_score = 100, pct = 80,
+       breakdown = bd)
+}
+
+# Numeric view of a (possibly character-coded) calendar column.
+.datetime_num <- function(v) {
+  if (is.character(v) || is.factor(v)) {
+    d <- tryCatch(suppressWarnings(as.Date(as.character(v), tryFormats = .DATE_FORMATS)),
+                  error = function(e) as.Date(rep(NA, length(v))))
+    as.numeric(d)
+  } else suppressWarnings(as.numeric(v))
+}
+
+.detect_covariates <- function(data, var_info, claimed = character(0)) {
   num_cols <- var_info$column[var_info$user_type == "Continuous"]
   cat_cols <- var_info$column[var_info$user_type %in% c("Categorical", "Binary")]
-  covs <- c(num_cols, cat_cols)
+  covs <- setdiff(c(num_cols, cat_cols), claimed)
   if (length(covs) > 0) {
     return(list(found = TRUE, role = "covariate", column = covs,
                 detected_by = "mathematical", score = 50, max_score = 100, pct = 50,
@@ -655,9 +976,12 @@
 # from these is RELABEL / S_n invariant.
 .role_cols <- function(r) {
   col <- r$column
-  if (is.null(col)) return(character(0))
-  if (is.list(col)) return(unname(unlist(lapply(col, function(p) unlist(p)))))
-  as.character(col)
+  cols <- if (is.null(col)) character(0)
+  else if (is.list(col)) unname(unlist(lapply(col, function(p) unlist(p))))
+  else as.character(col)
+  # 0.3.0: the axis candidates of an axis-ambiguous panel are claimed too -- a
+  # column offered as an admissible entity/time reading is not a residual covariate.
+  unique(c(cols, unname(unlist(r$panel_axes))))
 }
 
 # Dispatch one role need to its detector. `claimed` = columns already owned by a more-
@@ -670,12 +994,14 @@ detect_variable_role <- function(data, var_info, need, name_bonus = NULL, claime
     agreement_pairs    = .detect_agreement_pairs(data, var_info),
     time_variable      = .detect_survival_components(data, var_info, "time", name_bonus),
     event_variable     = .detect_survival_components(data, var_info, "event", name_bonus),
-    subject_id         = .detect_subject_id(data, var_info, name_bonus),
+    coupled_pair       = .detect_survival_components(data, var_info, "pair", name_bonus),
+    time_index         = .detect_time_index(data, var_info),
+    subject_id         = .detect_subject_id(data, var_info, name_bonus, claimed),
     outcome_continuous = .detect_outcome(data, var_info, "continuous", name_bonus, claimed),
     outcome_binary     = .detect_outcome(data, var_info, "binary", name_bonus, claimed),
     repeated_measures  = .detect_repeated_measures(data, var_info),
     scale_items        = .detect_scale_items(data, var_info),
-    covariate          = .detect_covariates(data, var_info),
+    covariate          = .detect_covariates(data, var_info, claimed),
     list(found = FALSE, role = need, column = NULL, detected_by = "none",
          score = 0, max_score = 0, pct = 0, breakdown = list())
   )
@@ -685,21 +1011,26 @@ detect_variable_role <- function(data, var_info, need, name_bonus = NULL, claime
 # repeated, scale) resolve BEFORE the outcomes so their columns are `claimed` (atomicity).
 .ROLE_NEEDS <- c(
   "group_var", "paired_pairs", "agreement_pairs", "time_variable",
-  "event_variable", "subject_id", "repeated_measures", "scale_items",
-  "outcome_continuous", "outcome_binary", "covariate"
+  "event_variable", "coupled_pair", "time_index", "subject_id",
+  "repeated_measures", "scale_items", "outcome_continuous", "outcome_binary",
+  "covariate"
 )
 
 # Roles whose detected columns BLOCK a column from also being an outcome (atomicity).
 # Excludes covariate (the catch-all) and the outcome roles themselves.
 .CLAIMING_ROLES <- c("group_var", "paired_pairs", "agreement_pairs", "time_variable",
-                     "event_variable", "subject_id", "repeated_measures", "scale_items")
+                     "event_variable", "coupled_pair", "time_index", "subject_id",
+                     "repeated_measures", "scale_items")
 
 # Run every detector + per-column value classification + potential pairs.
 run_all_detections <- function(data, var_info, name_bonus = NULL, verbose = FALSE) {
   roles <- list()
   for (need in .ROLE_NEEDS) {
-    claimed <- unique(unlist(lapply(intersect(names(roles), .CLAIMING_ROLES),
-                                    function(rn) .role_cols(roles[[rn]]))))
+    owners <- if (need == "covariate") names(roles) else intersect(names(roles), .CLAIMING_ROLES)
+    # Paired/agreement members are not outcome candidates; when the paired scorer latches onto a
+    # (cause, outcome) pair the continuous outcome stays silent (known limit).
+    # Measured-and-rejected alternatives: see the v0.3.0 development report (rolescry_v030/v030_dev_report.md, not distributed with the package).
+    claimed <- unique(unlist(lapply(owners, function(rn) .role_cols(roles[[rn]]))))
     roles[[need]] <- tryCatch(
       detect_variable_role(data, var_info, need, name_bonus, claimed),
       error = function(e) list(found = FALSE, role = need, .error = conditionMessage(e))
@@ -716,12 +1047,11 @@ run_all_detections <- function(data, var_info, name_bonus = NULL, verbose = FALS
       for (j in (i + 1):length(num_cols)) {
         a <- data[[num_cols[i]]]
         b <- data[[num_cols[j]]]
-        ps <- .score_paired_signature(a, b)
-        as <- .score_agreement_signature(a, b)
-        if (ps$pct >= 30 || as$pct >= 30) {
+        mb <- .mdl_pair_bits(a, b)
+        if (isTRUE(mb$bits > 0 && mb$agree)) {
           potential_pairs[[length(potential_pairs) + 1]] <- list(
             col1 = num_cols[i], col2 = num_cols[j],
-            paired_score = ps, agreement_score = as
+            bits = mb$bits, shift_bits = .mdl_shift_bits(a, b)
           )
         }
       }

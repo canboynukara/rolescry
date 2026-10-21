@@ -7,8 +7,11 @@ test_that("value-based role structure is recovered on continuous data", {
   tw <- make_turnusol_twins()
   res <- detect_roles(tw$col_n)
 
-  # every column is continuous numeric -> all are covariate candidates
-  expect_identical(role_index(res, "covariate", tw$col_n), 1:7)
+  # covariate is the residual role (0.3.0): every continuous column not claimed by
+  # another role, and never overlapping one
+  others <- setdiff(names(res$roles), "covariate")
+  owned <- sort(unique(unlist(lapply(others, function(r) role_index(res, r, tw$col_n)))))
+  expect_identical(role_index(res, "covariate", tw$col_n), setdiff(1:7, owned))
 
   # an outcome_continuous is always offered for continuous data
   expect_true(res$roles$outcome_continuous$found)

@@ -55,11 +55,14 @@ identical(pos(detect_roles(d), d), pos(detect_roles(d_blind), d_blind))
 
 Each column is first **typed by value** (`continuous`, `binary`, `categorical`,
 `ID`), never by name. Candidate roles are then scored by signatures that capture
-the statistical shape a role implies -- correlation and distributional overlap
-for paired measurements, Bland-Altman bias and intraclass correlation for
-agreement, event-rate and right-skew for survival, inter-item correlation and a
-Cronbach-alpha proxy for scale items, and so on. Every score is a transparent
-sum of named components you can inspect:
+the statistical shape a role implies. Group variables are ranked by normalized
+entropy; paired versus agreement measurements are separated by whether the
+difference carries a systematic shift (a description-length criterion); ordinal
+scale items by a one-factor description-length code; survival, wide repeated
+measures and binary scale items still use point signatures (event-rate and
+right-skew, same-units correlation blocks, item endorsement). Every score is a
+transparent set of named components you can inspect (bits for derived roles,
+points for the rest):
 
 ```{r breakdown}
 res$roles$paired_pairs$components[[1]]
@@ -95,6 +98,45 @@ compute_nmi(g, y)          # > 0: g informs y
 compute_nmi(g, sample(g))  # ~ 0: shuffled -> independent
 ```
 
+## Honesty under ambiguity (0.3.0)
+
+Some role questions have no answer in the data alone. A dependent pair of one
+binary and one positive continuous column is equally readable as a survival
+(time, event) pair or as a (cause, outcome) pair; `rolescry` assigns the
+survival roles only when the censoring geometry singles that reading out, and
+otherwise reports the pair *as a pair* and leaves the interpretation to you:
+
+```{r coupled}
+set.seed(3)
+n <- 300; arm <- rep(0:1, each = n / 2)
+end <- rnorm(n, 150, 15) - 10 * arm
+rct <- data.frame(arm = arm, sbp_end = end,
+                  resp = rbinom(n, 1, plogis(0.05 * (end - 140))))
+cp <- detect_roles(rct)$roles$coupled_pair
+cp$columns
+cp$interpretations
+```
+
+## Beyond one domain
+
+The signatures are domain-free, so the same call reads financial, social or
+experimental tables. Calendar columns (`Date`/`POSIXct`, or character columns
+whose every value parses as a date) are reported as `time_index`; a balanced
+long panel whose entity/time axes are value-symmetric is reported as
+axis-ambiguous (`repeated_measures$panel_axes`) unless serial dependence of the
+measures singles one reading out:
+
+```{r finance}
+set.seed(5)
+px <- data.frame(dt = as.Date("2024-01-02") + 0:199,
+                 price = 500 + cumsum(rnorm(200)), volume = rlnorm(200, 11, 0.5))
+detect_roles(px)$roles$time_index$columns
+```
+
+A finance keyword dictionary is available for the capped name channel:
+`rolescry_default_name_bonus("finance")` (or `"all"` for the union with the
+clinical dictionary).
+
 ## The optional, capped name bonus
 
 Names are not *useless* -- they are just untrustworthy. When you do trust them,
@@ -116,6 +158,63 @@ clin <- data.frame(
 detect_roles(clin)$roles$group_var$columns                                  # data alone -> "site"
 detect_roles(clin, name_bonus = rolescry_default_name_bonus())$roles$group_var$columns  # name nudge -> "treated"
 ```
+
+## Verifying a declared analysis plan
+
+`verify_roles()` asks whether the data can support a role assignment you declare.
+Here the claim wrongly pairs `age` with `sbp_end`; the real pre/post pair is left out.
+
+```{r verify}
+set.seed(21); n <- 300
+arm <- rep(c("drug", "placebo"), each = n / 2)
+base <- rnorm(n, 150, 15)
+rct <- data.frame(id = sample.int(99999, n), arm, age = round(rnorm(n, 60, 10)),
+                  sbp_base = base, sbp_end = base - 10 * (arm == "drug") + rnorm(n, 0, 8))
+rct$y <- rbinom(n, 1, plogis(-1 + 0.05 * (rct$sbp_end - 140)))
+verify_roles(rct, list(subject_id = "id", group_var = "arm", paired_pairs = c("age", "sbp_end"),
+                       outcome_binary = "y"))
+```
+
+The paired claim is `contradicted`: `age` and `sbp_end` share no information beyond the
+noise floor, a falsification backed by a value statistic. `id` is `consistent`
+as a subject identifier (all values distinct). The two design claims
+are `unverifiable(identifiability)`: which column is the grouping or the outcome
+is a design fact the joint distribution cannot reveal, so the data never call it
+`consistent`. A `consistent` verdict elsewhere means only "a reading the data
+support", never "correct", and `unverifiable(coverage)` means the package has no
+test or the evidence is empty. The last block lists the real pair
+`sbp_base`/`sbp_end`, which the claim did not mention.
+
+## Aligning roles across sites
+
+Pooling data from several centres starts with finding which column plays which role
+in each file. `harmonize_roles(sites)` runs the name-blind detector on every site and
+tabulates, per role, the column each site holds (`aligned` = found everywhere,
+`partial`, `absent`). Here the two sites share no column names and the order differs,
+and the event is coded 0/1 at one site and 1/2 at the other.
+
+```{r harmonize}
+site <- function(seed, nm, n = 200, code = 0:1) {
+  set.seed(seed); b <- rnorm(n, 150, 15); t <- rweibull(n, 1.3, exp(5 - rnorm(n)))
+  cens <- runif(n, 0, quantile(t, .9))
+  d <- data.frame(sample.int(99999, n), sample(c("a", "b"), n, TRUE), b, b - 5 + rnorm(n, 0, 6),
+                  round(pmin(t, cens), 1), code[1 + (t <= cens)])
+  setNames(d, nm)
+}
+north <- site(1, c("id", "arm", "sbp_base", "sbp_end", "time", "dead"))
+south <- site(2, c("pid", "group", "bp0", "bp1", "ftime", "status"), code = 1:2)[, c(3, 1, 6, 2, 5, 4)]
+harmonize_roles(list(north = north, south = south))
+```
+* `map` is the table above; `checks` adds descriptive rows per role found in two or
+  more sites (value type, event levels and coding, group-label Jaccard, range and
+  range overlap, battery size); `site_only` lists roles found at one site only.
+* Only categorical facts are flagged: `type_mismatch`, `coding_mismatch` (the
+  normalized event coding differs: 0/1, 1/2 and TRUE/FALSE normalize to the same
+  two-level shape, which level is the event is not checked; a 0/1/2 status differs) and `size_mismatch` (item counts differ). Jaccard and range overlap are
+  reported, never flagged, and no numeric threshold decides a flag.
+* Alignment is by role only; names appear in the output cells. The residual
+  `covariate` role is excluded.
+* `aligned` means the detector found the role at every site; it does not establish that the columns measure the same thing; read `checks` (levels, Jaccard, ranges) before pooling. Cell order is alphabetical and carries no pairing direction.
 
 ## Header-aware loading
 

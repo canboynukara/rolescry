@@ -11,6 +11,9 @@
 #' still dominates (>= 90 percent), satisfying the name-blindness contract.
 #' Detection without it (\code{name_bonus = NULL}) is purely mathematical.
 #'
+#' @param domain Keyword domain: \code{"clinical"} (default), \code{"finance"},
+#'   or \code{"all"} (the union). The dictionaries differ only in vocabulary;
+#'   the capped tie-break mechanics are identical.
 #' @return A named list of character vectors (regex fragments), with keys
 #'   \code{group_var}, \code{outcome_continuous}, \code{outcome_binary},
 #'   \code{subject_id}, \code{time_variable}, \code{event_variable}.
@@ -27,8 +30,9 @@
 #' detect_roles(d, name_bonus = nb)$roles$group_var$columns
 #'
 #' @export
-rolescry_default_name_bonus <- function() {
-  list(
+rolescry_default_name_bonus <- function(domain = c("clinical", "finance", "all")) {
+  domain <- match.arg(domain)
+  clinical <- list(
     group_var = c(
       "group", "treat", "arm", "cohort", "regimen", "protocol", "drug",
       "therapy", "interv", "exposure"
@@ -52,5 +56,19 @@ rolescry_default_name_bonus <- function() {
       "event", "death", "died", "status", "censor", "fail", "delta",
       "relapse", "recur", "outcome"
     )
+  )
+  finance <- list(
+    group_var = c("sector", "portfolio", "segment", "rating_class", "tranche", "fund"),
+    outcome_continuous = c("return", "yield", "pnl", "spread", "price", "nav"),
+    outcome_binary = c("default", "delinquen", "churn", "fraud", "downgrade", "margin_call"),
+    subject_id = c("id", "ticker", "isin", "cusip", "account", "loan", "firm", "entity"),
+    time_variable = c("maturity", "tenor", "duration", "time", "days", "months", "age"),
+    event_variable = c("default", "prepay", "event", "status", "fail", "exit")
+  )
+  switch(domain,
+    clinical = clinical,
+    finance = finance,
+    all = stats::setNames(lapply(union(names(clinical), names(finance)), function(k)
+      unique(c(clinical[[k]], finance[[k]]))), union(names(clinical), names(finance)))
   )
 }
