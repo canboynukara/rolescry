@@ -97,7 +97,7 @@ public survival data. Detection stays deterministic and name-blind.
   optional and capped.
 * README, DESCRIPTION and examples reworded domain-neutrally.
 
-## Behaviour changes
+## Behavior changes
 
 * **Logical event columns.** A TRUE/FALSE column now value-types as Binary; it was
   typed "Other" and silently excluded from every survival and outcome candidate set.
@@ -122,7 +122,7 @@ public survival data. Detection stays deterministic and name-blind.
 
 ## Bug fixes
 
-* The KSG mutual-information estimator returned `NaN` on tied values (a neighbour count
+* The KSG mutual-information estimator returned `NaN` on tied values (a neighbor count
   of -1 passed to `digamma()`), which made the dependence measure `NaN` and emitted
   warnings (e.g. `survival::pbc`). Counts are now clamped at zero.
 * Correlation calls on constant columns in the paired/agreement scorers no longer emit
@@ -142,14 +142,14 @@ the name-blindness contract, and more robust survival-code handling. Detection
 remains deterministic and, by default (`name_bonus = NULL`), a pure function of
 each column's value signature.
 
-## Behaviour changes
+## Behavior changes
 
 * **Name-blindness contract fix.** Column typing no longer consults column names
   when `name_bonus = NULL`. Previously a weak-signature identifier column could
   be typed from its name; such a column is now typed from its values only, so
   its assignment can differ from 0.1.0. This restores the package's core
   invariant: renaming columns to `col_1, col_2, ...` cannot change any role.
-* **Survival event coding.** Event detection now normalises 2- and 3-level
+* **Survival event coding.** Event detection now normalizes 2- and 3-level
   numeric and logical codings to `{0, 1}`; factor and character codings are
   intentionally not coerced.
 
@@ -186,7 +186,7 @@ each column's value signature.
   archived analytic snapshot (git tag `v.0.2.0`; Zenodo 10.5281/zenodo.21003941)
   in corrected vignette example data, test expectations aligned with the current
   detector, a `stats::` import, and an updated `.Rbuildignore`. Detection
-  behaviour, its thresholds, and the confirmatory results above are unchanged.
+  behavior, its thresholds, and the confirmatory results above are unchanged.
 
 ## Citation
 

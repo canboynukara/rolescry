@@ -51,7 +51,7 @@ points and \code{pct} is the points ratio.}
 MDL pair bits and shift bits. The paired/agreement split is the sign of the
 shift bits, a BIC-type test of a mean difference between the two columns:
 \code{agreement_pairs} means "no detectable systematic shift", so a
-method-comparison pair with a real calibration bias is labelled
+method-comparison pair with a real calibration bias is labeled
 \code{paired_pairs}, and the label depends on n. Exactly one pair is
 reported across the two roles.}
 \item{n_obs, n_var}{dataset dimensions.}

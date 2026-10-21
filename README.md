@@ -43,7 +43,7 @@ For anyone evaluating or using `rolescry`, the practical position is:
 - **No overlapping distributed software.** MDStatR is not publicly released and is not
   installable; it is archived on Zenodo as a record only. No other package duplicates
   `rolescry`'s functionality.
-- **Its own contracts and evidence.** The relabelling-invariance and permutation-
+- **Its own contracts and evidence.** The relabeling-invariance and permutation-
   equivariance guarantees, the test suite that enforces them, and the pre-registered
   evaluation belong to `rolescry` and have no counterpart in MDStatR.
 
@@ -209,7 +209,7 @@ verify_roles(rct, list(subject_id = "id", group_var = "arm", paired_pairs = c("a
 
 ## Aligning roles across sites without a codebook
 
-Pooling data from several centres starts with finding which column plays which role
+Pooling data from several centers starts with finding which column plays which role
 in each file. `harmonize_roles(sites)` runs the name-blind detector on every site and
 tabulates, per role, the column each site holds (`aligned` = found everywhere,
 `partial`, `absent`). Here the two sites share no column names and the order differs,
@@ -273,7 +273,7 @@ harmonize_roles(list(north = north, south = south))
 - Paired versus agreement is the sign of the MDL shift bits of the single best pair, a
   BIC-type test of a mean difference between the two columns. `agreement_pairs` therefore
   means "no detectable systematic shift": biased method-comparison (Bland-Altman) data with
-  a real calibration bias is labelled `paired_pairs`, and the label is n-dependent (a
+  a real calibration bias is labeled `paired_pairs`, and the label is n-dependent (a
   0.5-unit bias at SD 15 flips from agreement to paired between n of about 200 and 1000).
   About 3% of unbiased pairs at n = 100 read as paired under the null. Exactly one pair is
   reported across the two roles.
