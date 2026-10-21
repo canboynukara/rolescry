@@ -1,12 +1,9 @@
 Package: rolescry
 Title: Name-Blind Variable-Role Detection by Data Signature
 Version: 0.3.0
-Authors@R: c(
-    person("Can", "Boynukara", role = c("aut", "cre", "cph"),
-           email = "canboynukara1@gmail.com",
-           comment = c(ORCID = "0000-0002-6075-3923")),
-    person(c("M.", "Yasir"), "Ceyhan", role = "ctb",
-           comment = c(ORCID = "0009-0008-0985-9838")))
+Authors@R: person("Can", "Boynukara", role = c("aut", "cre", "cph"),
+    email = "canboynukara1@gmail.com",
+    comment = c(ORCID = "0000-0002-6075-3923"))
 Description: Deterministic, name-blind detection of variable roles (group,
     outcome, survival or duration time and event, coupled binary-continuous
     pairs, calendar time index, paired and agreement measurements, repeated
@@ -33,7 +30,3 @@ URL: https://github.com/canboynukara/rolescry
 BugReports: https://github.com/canboynukara/rolescry/issues
 Language: en-US
 NeedsCompilation: no
-Packaged: 2026-10-21 09:15:19 UTC; root
-Author: Can Boynukara [aut, cre, cph] (<https://orcid.org/0000-0002-6075-3923>),
-  M. Yasir Ceyhan [ctb] (<https://orcid.org/0009-0008-0985-9838>)
-Maintainer: Can Boynukara <canboynukara1@gmail.com>

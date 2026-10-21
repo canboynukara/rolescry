@@ -35,10 +35,6 @@ Useful links:
 \author{
 \strong{Maintainer}: Can Boynukara \email{canboynukara1@gmail.com} (\href{https://orcid.org/0000-0002-6075-3923}{ORCID}) [copyright holder]
 
-Other contributors:
-\itemize{
-  \item M. Yasir Ceyhan (\href{https://orcid.org/0009-0008-0985-9838}{ORCID}) [contributor]
-}
 
 }
 \keyword{internal}
