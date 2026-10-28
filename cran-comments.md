@@ -17,13 +17,17 @@ rule. See NEWS.md.
 
 ## Test environments
 
-* local: Linux (x86_64), R 4.3.3 -- 0 errors, 0 warnings, 0 notes
-* win-builder: R-release and R-devel -- (fill in after submission)
-* macOS builder (R-release, arm64) -- (fill in after submission)
+* local: Windows 11, R 4.5.3 -- 0 errors, 0 warnings, 1 note ("unable to
+  verify current time", environment only); Linux x86_64, R 4.3.3 -- tests OK
+* win-builder: R-release 4.6.1 -- Status: OK
+* win-builder: R-devel -- submitted 2026-10-28 (result pending at the time of writing)
+* macOS builder: r-release-macosx-arm64, R 4.6.1, Apple M1, clang-1700 --
+  Status: OK (errors:no, warnings:no, notes:no) -- the platform of the
+  reported failure
 
 ## R CMD check results
 
-0 errors | 0 warnings | 0 notes
+0 errors | 0 warnings | 0 notes (win-builder, macOS arm64)
 
 ## Reverse dependencies
 
