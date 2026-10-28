@@ -37,7 +37,9 @@ make_namebonus_twins <- function(seed = 7L) {
   # fingerprint coin flip. Two causes make death's evidence sum dominate either
   # cause's, and binary causes keep the pair out of the coupled_pair channel.
   smoker <- stats::rbinom(n, 1, 0.4)
-  death <- stats::rbinom(n, 1, stats::plogis(-2 + 1.4 * male + 1.4 * smoker))
+  # 0.3.1: coefficients raised so BOTH causes pay their MDL bits at n = 160 (at 1.4 the
+  # smoker cause did not, and death tied male on one symmetric 2x2 G^2).
+  death <- stats::rbinom(n, 1, stats::plogis(-2.5 + 2.2 * male + 2.2 * smoker))
   named <- data.frame(treatment_arm = treat, male = male, smoker = smoker, pre = pre,
                       post = post, death = death, check.names = FALSE)
   col_n <- named

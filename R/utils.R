@@ -93,10 +93,17 @@
 # NA as not-found). Distinct columns never collide barring identical values.
 .canonical_pick <- function(cols, scores, data) {
   fps <- unname(vapply(cols, function(k) .col_fingerprint(data[[k]]), character(1L)))
-  ord <- order(-scores, fps)
+  # 0.3.1: scores that differ only by floating-point noise are TIES, so the pick is
+  # decided by the value fingerprint on every platform (CRAN M1mac/noLD: a symmetric
+  # 2x2 evidence computed two ways differed in the last ulp and flipped the pick).
+  # Tolerance = 64 machine epsilons relative to the score scale: numeric, not a
+  # decision threshold (no two genuinely different scores sit that close).
+  tol <- 64 * .Machine$double.eps * max(1, abs(scores), na.rm = TRUE)
+  key <- round(scores / tol)                      # equal keys <=> scores within tol
+  ord <- order(-key, fps)
   if (length(ord) >= 2L) {
     i1 <- ord[1]; i2 <- ord[2]
-    if (isTRUE(scores[i1] == scores[i2]) && isTRUE(fps[i1] == fps[i2])) return(NA_character_)
+    if (isTRUE(key[i1] == key[i2]) && isTRUE(fps[i1] == fps[i2])) return(NA_character_)
   }
   cols[ord[1]]
 }

@@ -1,5 +1,6 @@
-# rolescry 0.3.0.9000 (development)
+# rolescry 0.3.1
 
+* Platform-stable tie-breaking: `.canonical_pick()` treats scores within 64 machine epsilons as tied and resolves them by the value fingerprint, so a pick no longer depends on last-ulp arithmetic differences (CRAN r-release-macos-arm64 / noLD test failure in `test-name-blind.R`, where two candidates had exactly symmetric evidence). The name-blind test fixture now has two causes that both pay their MDL bits.
 * `inst/CITATION` now cites the Zenodo concept DOI 10.5281/zenodo.20737629 (all versions); `CITATION.cff` records the v0.3.0 DOI 10.5281/zenodo.23540121.
 
 # rolescry 0.3.0
